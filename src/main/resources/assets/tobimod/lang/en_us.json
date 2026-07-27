@@ -1,0 +1,17 @@
+{
+  "key.categories.tobimod": "Tobi Mod",
+  "key.tobimod.kamui_intangibility": "Kamui Intangibility",
+  "key.tobimod.kamui_travel": "Kamui Travel",
+  "key.tobimod.kamui_attack": "Kamui Attack",
+  "key.tobimod.basic_genjutsu": "Basic Genjutsu",
+  "key.tobimod.advanced_genjutsu": "Advanced Genjutsu",
+  "key.tobimod.kamui_warp": "Kamui Warp",
+  "key.tobimod.location_marker": "Location Marker",
+  "key.tobimod.black_receivers": "Black Receivers",
+
+  "ability.tobimod.kamui_intangibility.activated": "§5Kamui Intangibility — Activated",
+  "ability.tobimod.kamui_intangibility.deactivated": "§7Kamui Intangibility — Deactivated",
+  "ability.tobimod.kamui_intangibility.expired": "§cKamui Intangibility — Expired",
+  "ability.tobimod.kamui_intangibility.cooldown": "§7Kamui Intangibility — §cCooldown: %ds",
+  "ability.tobimod.kamui_intangibility.timer": "§5Kamui Intangibility — %ds remaining"
+}
