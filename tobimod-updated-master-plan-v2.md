@@ -1072,5 +1072,31 @@ An ability is complete when:
 
 ---
 
-**Document status:** Current consolidated design and implementation plan.  
-**Last update:** Combat Kamui core has been tested and works; Kamui Absorption, Kamui Void, and C navigation GUI are the next major planning/implementation systems.
+---
+
+# 21. Session Handoff — C Navigation GUI (READ FIRST)
+
+## What happened
+
+The C navigation GUI (scope A: screens plus storage, no teleporting) was written
+in full, but the session that wrote it lost GitHub access before pushing, because
+its pull request had been merged. **None of this code has ever been compiled by
+CI.** The user has been pasting the files into a local copy at
+`Tobi-neoforge-1.21.1-main` and running Gradle by hand.
+
+Assume remaining compile errors. They have been ordinary wrong-API-name mistakes,
+each a one-line fix.
+
+## Compile errors already found and fixed
+
+Apply these if the code is ever re-pasted from an older copy.
+
+1. **Missing package.** `client/renderers/` did not exist. Create the folder and
+   add `TobiRenderTypes.java`.
+
+2. **`InputConstants.KEY_ENTER` does not exist.** In `WaypointEditorScreen.java`:
+   ```java
+   // wrong
+   if (keyCode == InputConstants.KEY_ENTER || keyCode == InputConstants.KEY_KP_ENTER) {
+   // correct
+   if (keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER) {
