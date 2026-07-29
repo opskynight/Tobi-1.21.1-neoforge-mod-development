@@ -1,0 +1,11 @@
+{
+  "type": "kamui:void",
+  "generator": {
+    "type": "minecraft:noise",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "kamui:void"
+    },
+    "settings": "kamui:flat"
+  }
+}

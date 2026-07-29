@@ -1,0 +1,16 @@
+# ============================================
+# GIVE KAMUI OFFENSIVE STYLE COAS
+# ============================================
+# Usage: /function tobi:coas/give_offensive
+# Or target specific player: /execute as PlayerName run function tobi:coas/give_offensive
+
+# Give to nearest player if no context, otherwise give to @s
+execute unless entity @s run give @p carrot_on_a_stick[unbreakable={},custom_name='{"text":"Kamui Offensive (Short Range)","color":"dark_purple","bold":true,"italic":false}',lore=['{"text":"Tobi\'s offensive capabilities","color":"gray","italic":false}','{"text":"","color":"gray","italic":false}','{"text":"SWAP TO OFFHAND: Change Mode","color":"gold","italic":false}','{"text":"→ Short Range → Long Range → Return","color":"yellow","italic":false}','{"text":"","color":"gray","italic":false}','{"text":"SHORT RANGE MODE:","color":"red","italic":false}','{"text":"→ SNEAK: Freeze entities (3 blocks)","color":"dark_red","italic":false}','{"text":"→ Remove NoAI, apply blindness","color":"dark_red","italic":false}','{"text":"","color":"gray","italic":false}','{"text":"LONG RANGE MODE:","color":"light_purple","italic":false}','{"text":"→ AIM: Place target marker","color":"dark_purple","italic":false}','{"text":"→ SNEAK 2s: Kidnap to void","color":"dark_purple","italic":false}','{"text":"","color":"gray","italic":false}','{"text":"RETURN MODE:","color":"aqua","italic":false}','{"text":"→ SNEAK 2s: Return from void","color":"dark_aqua","italic":false}'],custom_model_data=2,custom_data={tobi_offensive:1b,offensive_mode:0}] 1
+
+execute if entity @s run give @s carrot_on_a_stick[unbreakable={},custom_name='{"text":"Kamui Offensive (Short Range)","color":"dark_purple","bold":true,"italic":false}',lore=['{"text":"Tobi\'s offensive capabilities","color":"gray","italic":false}','{"text":"","color":"gray","italic":false}','{"text":"SWAP TO OFFHAND: Change Mode","color":"gold","italic":false}','{"text":"→ Short Range → Long Range → Return","color":"yellow","italic":false}','{"text":"","color":"gray","italic":false}','{"text":"SHORT RANGE MODE:","color":"red","italic":false}','{"text":"→ SNEAK: Freeze entities (3 blocks)","color":"dark_red","italic":false}','{"text":"→ Remove NoAI, apply blindness","color":"dark_red","italic":false}','{"text":"","color":"gray","italic":false}','{"text":"LONG RANGE MODE:","color":"light_purple","italic":false}','{"text":"→ AIM: Place target marker","color":"dark_purple","italic":false}','{"text":"→ SNEAK 2s: Kidnap to void","color":"dark_purple","italic":false}','{"text":"","color":"gray","italic":false}','{"text":"RETURN MODE:","color":"aqua","italic":false}','{"text":"→ SNEAK 2s: Return from void","color":"dark_aqua","italic":false}'],custom_model_data=2,custom_data={tobi_offensive:1b,offensive_mode:0}] 1
+
+execute unless entity @s run tellraw @p {"text":"[Tobi] Received Kamui Offensive Style! (Short Range)","color":"dark_purple","bold":true}
+execute unless entity @s run tellraw @p {"text":"→ Swap to offhand (F key) to change modes","color":"light_purple"}
+
+execute if entity @s run tellraw @s {"text":"[Tobi] Received Kamui Offensive Style! (Short Range)","color":"dark_purple","bold":true}
+execute if entity @s run tellraw @s {"text":"→ Swap to offhand (F key) to change modes","color":"light_purple"}
