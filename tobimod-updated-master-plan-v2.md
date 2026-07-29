@@ -623,6 +623,10 @@ Start 3-second vulnerable channel
 Teleport player to Kamui Void
 ```
 
+Note: the saved **origin** keeps yaw/pitch so the round trip returns the player
+facing exactly as they left. This is separate from **waypoints** (§10), which
+deliberately do not store yaw/pitch.
+
 ## Return
 
 While inside Kamui Void, choose the return/origin option:
@@ -650,9 +654,9 @@ DOT does not cancel
 
 The C system is planned as a radial/navigation GUI. It combines self warp, waypoints, and manual coordinate transfer.
 
-## Important unresolved input conflict
+## Input conflict — RESOLVED
 
-Earlier ideas say both:
+Earlier ideas said both:
 
 ```text
 Hold C to channel Self Kamui
@@ -661,14 +665,14 @@ Hold C to open a radial GUI
 
 These cannot happen from the same hold at the same time.
 
-Recommended interaction to finalize later:
+**Final decision:** C only ever opens the wheel. C never starts a channel directly.
 
 ```text
 Press/hold C → open radial wheel
 Choose an option → start that option's 3-second channel
 ```
 
-This preserves the desired channel without using C for two conflicting actions.
+Every action selected from the wheel starts its own 3-second vulnerable channel.
 
 ## Main radial wheel
 
@@ -676,11 +680,34 @@ Contents:
 
 ```text
 Special option: Enter Kamui / Return to Origin
-Center option: Manual Coordinates
+Center button:  "Choose Coordinates"
 10 surrounding slots: saved favorite locations
 ```
 
-Do not permanently cram editable X/Y/Z boxes inside a small wheel. Clicking the center opens a clean coordinate sub-screen.
+The special option is context-sensitive:
+
+```text
+Outside tobimod:kamui_void → "Enter Kamui"
+Inside  tobimod:kamui_void → "Return to Origin"
+```
+
+### Center button — CONFIRMED
+
+The middle of the wheel is a **button labelled "Choose Coordinates"**. It does not
+teleport and does not start a channel. Clicking it navigates away from the wheel
+to the manual coordinate selection screen.
+
+```text
+Click center "Choose Coordinates"
+        ↓
+Wheel closes / is replaced
+        ↓
+Manual coordinate selection screen opens
+        ↓
+Channel only starts after Teleport is confirmed there
+```
+
+Do not cram editable X/Y/Z boxes inside the small wheel.
 
 ## Manual coordinate page
 
@@ -710,14 +737,16 @@ Server validates coordinates/build limits/world border/safe arrival
 Maximum: 10 saved favorites per player
 ```
 
-Each stores:
+Each stores exactly:
 
 ```text
 Custom name
 X/Y/Z
 Dimension ID
-Optional yaw/pitch
 ```
+
+Yaw/pitch is **not** stored. The earlier "optional yaw/pitch" idea is dropped;
+arrival facing is whatever the player is already facing.
 
 ### Empty slot
 
@@ -1015,7 +1044,9 @@ Full Black Receiver refinement
 
 # 19. Open Decisions Still Needed
 
-1. **C input behavior:** Exact radial GUI opening/selection behavior versus the 3-second self-warp channel.
+1. ~~**C input behavior**~~ — **RESOLVED.** C opens the wheel only; never channels
+   directly. Selecting a wheel option starts that option's 3-second channel.
+   Center is a "Choose Coordinates" button that navigates to the manual screen.
 2. **Release destination outside Kamui Void:** Confirm all released mobs should appear at the caster's current location.
 3. **Line of sight for X absorption:** The current new design defines a forward range/cone but has not explicitly finalized whether blocks can block selection. Recommended: require line of sight.
 4. **Player capture:** Not included in current target plan; leave for future multiplayer-specific design.
