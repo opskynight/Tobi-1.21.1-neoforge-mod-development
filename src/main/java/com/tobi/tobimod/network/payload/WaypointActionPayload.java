@@ -21,7 +21,10 @@ public record WaypointActionPayload(Action action, int slot, String name) implem
         /** Rename an existing waypoint without moving it. */
         RENAME,
         /** Clear the slot. */
-        DELETE
+DELETE,
+        ENTER_KAMUI,
+        LEAVE_KAMUI,
+        TRAVEL
     }
 
     public static final Type<WaypointActionPayload> TYPE =

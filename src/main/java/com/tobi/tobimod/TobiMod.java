@@ -5,6 +5,10 @@ import com.tobi.tobimod.common.abilities.KamuiIntangibilityState;
 import com.tobi.tobimod.common.sound.ModSoundEvents;
 import com.tobi.tobimod.common.waypoints.KamuiWaypoints;
 import net.neoforged.bus.api.IEventBus;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.world.level.Level;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -16,6 +20,10 @@ import java.util.function.Supplier;
 @Mod(TobiMod.MOD_ID)
 public final class TobiMod {
     public static final String MOD_ID = "tobimod";
+    public static final ResourceLocation KAMUI_DIMENSION_LOCATION =
+            ResourceLocation.fromNamespaceAndPath(MOD_ID, "kamui_void");
+    public static final ResourceKey<Level> KAMUI_DIMENSION =
+            ResourceKey.create(Registries.DIMENSION, KAMUI_DIMENSION_LOCATION);
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES =
