@@ -57,7 +57,7 @@ public class KamuiNavigationScreen extends Screen {
     private int timeIn;
     private int slotHovered = -1;
     private int slotSelected = -1;
-    private boolean staysOpen;
+    private static boolean staysOpen;
 
     private ExtendedButton renameButton;
     private ExtendedButton deleteButton;
@@ -91,6 +91,11 @@ public class KamuiNavigationScreen extends Screen {
     @Override
     public void init() {
         super.init();
+
+        // Reset interaction state in case the screen is re-initialised while
+        // the mouse is already over a slice (e.g. returning from the editor).
+        slotHovered = -1;
+        slotSelected = -1;
 
         int centerX = this.width / 2;
         int centerY = this.height / 2;
@@ -353,12 +358,30 @@ public class KamuiNavigationScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Grace period: ignore clicks for the first few ticks after the screen
+        // opens so a held-down or quickly re-pressed mouse button from a
+        // sub-screen (editor, manual coords) cannot accidentally select a slot.
+        if (timeIn < 5) {
+            return true;
+        }
+
         if (isInRange(mouseX, mouseY) && slotHovered != -1) {
             selectSlot(slotHovered);
             return true;
         }
 
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        // Swallow releases during the opening grace period so a held-down click
+        // from a sub-screen cannot arm a widget on the freshly-opened wheel.
+        if (timeIn < 5) {
+            return true;
+        }
+
+        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     /**

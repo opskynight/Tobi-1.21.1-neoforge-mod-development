@@ -2,6 +2,7 @@ package com.tobi.tobimod;
 
 import com.mojang.logging.LogUtils;
 import com.tobi.tobimod.common.abilities.KamuiIntangibilityState;
+import com.tobi.tobimod.common.sound.ModSoundEvents;
 import com.tobi.tobimod.common.waypoints.KamuiWaypoints;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
@@ -42,6 +43,7 @@ public final class TobiMod {
 
     public TobiMod(IEventBus modBus) {
         ATTACHMENT_TYPES.register(modBus);
+        ModSoundEvents.SOUND_EVENTS.register(modBus);
         LOGGER.info("Tobi Mod initialized");
     }
 }

@@ -31,5 +31,7 @@
   "screen.tobimod.same_dimension_only": "Same dimension only",
   "screen.tobimod.teleport": "Teleport",
   "screen.tobimod.confirm": "Confirm",
-  "screen.tobimod.cancel": "Cancel"
+  "screen.tobimod.cancel": "Cancel",
+
+  "sound.tobimod.kamui_channel": "Kamui channeling"
 }
