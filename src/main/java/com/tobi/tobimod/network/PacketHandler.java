@@ -8,6 +8,10 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import com.tobi.tobimod.common.waypoints.WaypointHandler;
+import com.tobi.tobimod.network.payload.WaypointActionPayload;
+import com.tobi.tobimod.network.payload.WaypointSyncPayload;
+
 
 @EventBusSubscriber(
         modid = TobiMod.MOD_ID,
@@ -19,6 +23,18 @@ public final class PacketHandler {
     @SubscribeEvent
     public static void registerPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
+
+        registrar.playToServer(
+                WaypointActionPayload.TYPE,
+                WaypointActionPayload.STREAM_CODEC,
+                WaypointHandler::handleActionPayload
+        );
+
+        registrar.playToClient(
+                WaypointSyncPayload.TYPE,
+                WaypointSyncPayload.STREAM_CODEC,
+                WaypointSyncPayload::handle
+        );
 
         registrar.playToServer(
                 KamuiIntangibilityTogglePayload.TYPE,

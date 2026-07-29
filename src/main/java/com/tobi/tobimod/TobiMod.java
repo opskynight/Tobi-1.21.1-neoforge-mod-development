@@ -2,6 +2,7 @@ package com.tobi.tobimod;
 
 import com.mojang.logging.LogUtils;
 import com.tobi.tobimod.common.abilities.KamuiIntangibilityState;
+import com.tobi.tobimod.common.waypoints.KamuiWaypoints;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.attachment.AttachmentType;
@@ -24,6 +25,18 @@ public final class TobiMod {
             ATTACHMENT_TYPES.register("kamui_intangibility_state", () ->
                     AttachmentType.builder(KamuiIntangibilityState::new)
                             .serialize(KamuiIntangibilityState.CODEC)
+                            .build()
+            );
+
+    /**
+     * Saved Kamui navigation waypoints. Copied on death so dying never costs a
+     * player their saved destinations.
+     */
+    public static final Supplier<AttachmentType<KamuiWaypoints>> KAMUI_WAYPOINTS =
+            ATTACHMENT_TYPES.register("kamui_waypoints", () ->
+                    AttachmentType.builder(KamuiWaypoints::new)
+                            .serialize(KamuiWaypoints.CODEC)
+                            .copyOnDeath()
                             .build()
             );
 

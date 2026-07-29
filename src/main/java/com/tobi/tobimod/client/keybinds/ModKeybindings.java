@@ -31,8 +31,9 @@ public final class ModKeybindings {
             "key.categories.tobimod"
     );
 
-    public static final KeyMapping KAMUI_ATTACK = new KeyMapping(
-            "key.tobimod.kamui_attack",
+    /** Opens the Kamui navigation wheel. Never starts a channel directly. */
+    public static final KeyMapping KAMUI_NAVIGATION = new KeyMapping(
+            "key.tobimod.kamui_navigation",
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_C,
             "key.categories.tobimod"
@@ -59,13 +60,6 @@ public final class ModKeybindings {
             "key.categories.tobimod"
     );
 
-    public static final KeyMapping LOCATION_MARKER = new KeyMapping(
-            "key.tobimod.location_marker",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_Z,
-            "key.categories.tobimod"
-    );
-
     public static final KeyMapping BLACK_RECEIVERS = new KeyMapping(
             "key.tobimod.black_receivers",
             InputConstants.Type.KEYSYM,
@@ -77,11 +71,10 @@ public final class ModKeybindings {
     public static void registerKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(KAMUI_INTANGIBILITY);
         event.register(KAMUI_TRAVEL);
-        event.register(KAMUI_ATTACK);
+        event.register(KAMUI_NAVIGATION);
         event.register(BASIC_GENJUTSU);
         event.register(ADVANCED_GENJUTSU);
         event.register(KAMUI_WARP);
-        event.register(LOCATION_MARKER);
         event.register(BLACK_RECEIVERS);
     }
 }

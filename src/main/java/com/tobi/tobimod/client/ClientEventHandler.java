@@ -2,7 +2,7 @@ package com.tobi.tobimod.client;
 
 import com.tobi.tobimod.TobiMod;
 import com.tobi.tobimod.client.keybinds.ModKeybindings;
-import com.tobi.tobimod.client.screens.TobiRadialMenu;
+import com.tobi.tobimod.client.screens.KamuiNavigationScreen;
 import com.tobi.tobimod.network.payload.KamuiIntangibilityStatePayload;
 import com.tobi.tobimod.network.payload.KamuiIntangibilityTogglePayload;
 import net.minecraft.client.Minecraft;
@@ -35,9 +35,9 @@ public final class ClientEventHandler {
             }
         }
 
-        while (ModKeybindings.LOCATION_MARKER.consumeClick()) {
-            if (minecraft.screen == null) {
-                minecraft.setScreen(new TobiRadialMenu());
+        while (ModKeybindings.KAMUI_NAVIGATION.consumeClick()) {
+            if (minecraft.player != null && minecraft.screen == null) {
+                minecraft.setScreen(new KamuiNavigationScreen());
             }
         }
     }
