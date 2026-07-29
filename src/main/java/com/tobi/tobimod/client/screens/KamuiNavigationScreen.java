@@ -117,9 +117,11 @@ public class KamuiNavigationScreen extends Screen {
                 104,
                 18,
                 selfKamuiLabel(),
-                button -> {}
+button -> PacketDistributor.sendToServer(new WaypointActionPayload(
+                        isInsideKamuiVoid() ? WaypointActionPayload.Action.LEAVE_KAMUI : WaypointActionPayload.Action.ENTER_KAMUI,
+                        -1, ""))
         );
-        selfKamuiButton.active = false;
+        selfKamuiButton.active = true;
         addRenderableWidget(selfKamuiButton);
 
         teleportButton = new ExtendedButton(
@@ -128,7 +130,12 @@ public class KamuiNavigationScreen extends Screen {
                 104,
                 18,
                 Component.translatable("screen.tobimod.travel_to_waypoint"),
-                button -> {}
+button -> {
+                    if (KamuiWaypoints.isValidSlot(slotSelected)) {
+                        PacketDistributor.sendToServer(new WaypointActionPayload(
+                                WaypointActionPayload.Action.TRAVEL, slotSelected, ""));
+                    }
+                }
         );
         teleportButton.active = false;
         addRenderableWidget(teleportButton);
@@ -207,8 +214,7 @@ public class KamuiNavigationScreen extends Screen {
             deleteButton.active = filled;
         }
         if (teleportButton != null) {
-            // Deliberately inert until the shared channel system lands.
-            teleportButton.active = false;
+teleportButton.active = filled;
         }
     }
 
