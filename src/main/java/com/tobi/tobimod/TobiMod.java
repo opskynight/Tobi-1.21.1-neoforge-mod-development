@@ -18,7 +18,7 @@ public final class TobiMod {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES =
-            DeferredRegister.create(NeoForgeRegistries.ATTACHMENT_TYPES, MOD_ID);
+            DeferredRegister.create(NeoForgeRegattypes, MOD_ID);
 
     /** The only authoritative status storage for Combat Kamui Intangibility. */
     public static final Supplier<AttachmentType<KamuiIntangibilityState>> KAMUI_INTANGIBILITY_STATE =
@@ -34,7 +34,7 @@ public final class TobiMod {
      */
     public static final Supplier<AttachmentType<KamuiWaypoints>> KAMUI_WAYPOINTS =
             ATTACHMENT_TYPES.register("kamui_waypoints", () ->
-                    AttachmentType.builder(KamuiWaypoints::new)
+                    AttachmentType.builder(() -> new KamuiWaypoints())
                             .serialize(KamuiWaypoints.CODEC)
                             .copyOnDeath()
                             .build()
