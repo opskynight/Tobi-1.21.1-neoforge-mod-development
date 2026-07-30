@@ -9,7 +9,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 
 /** Builds Kamui's deliberately sparse, repeating concrete-column landscape. */
-// Disabled while dimension bootstrapping is verified; block placement during ChunkEvent.Load can re-enter world generation.
+@EventBusSubscriber(modid = TobiMod.MOD_ID)
 public final class KamuiVoidColumns {
     private KamuiVoidColumns() {}
 

@@ -1,6 +1,8 @@
 package com.tobi.tobimod.common.world;
 
 import com.tobi.tobimod.TobiMod;
+import com.tobi.tobimod.common.waypoints.KamuiWaypoint;
+import com.tobi.tobimod.common.waypoints.KamuiWaypoints;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -49,6 +51,29 @@ public final class KamuiTravel {
         }
         teleport(player, destination, x, y, z);
         player.getPersistentData().remove(ORIGIN);
+    }
+
+    /**
+     * Travels to a saved waypoint slot.
+     * Called after the 3-second channel completes.
+     */
+    public static void travelToWaypoint(ServerPlayer player, int slot) {
+        KamuiWaypoints book = player.getData(TobiMod.KAMUI_WAYPOINTS);
+        if (!KamuiWaypoints.isValidSlot(slot)) return;
+        KamuiWaypoint point = book.get(slot);
+        if (point.isEmpty()) return;
+        ServerLevel destination = player.server.getLevel(point.dimension());
+        if (destination != null) {
+            teleport(player, destination, point.x(), point.y(), point.z());
+        }
+    }
+
+    /**
+     * Travels to arbitrary coordinates within the player's current dimension.
+     * Called after the 3-second channel completes.
+     */
+    public static void travelToCoords(ServerPlayer player, double x, double y, double z) {
+        teleport(player, (ServerLevel) player.level(), x, y, z);
     }
 
     private static int safeY(ServerLevel level) {

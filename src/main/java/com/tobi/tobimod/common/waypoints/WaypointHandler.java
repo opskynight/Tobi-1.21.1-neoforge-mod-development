@@ -1,10 +1,9 @@
 package com.tobi.tobimod.common.waypoints;
 
 import com.tobi.tobimod.TobiMod;
+import com.tobi.tobimod.common.abilities.KamuiChannelHandler;
 import com.tobi.tobimod.network.payload.WaypointActionPayload;
 import com.tobi.tobimod.network.payload.WaypointSyncPayload;
-import com.tobi.tobimod.common.world.KamuiTravel;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -32,9 +31,9 @@ public final class WaypointHandler {
     }
 
     private static void apply(ServerPlayer player, WaypointActionPayload payload) {
-if (payload.action() == WaypointActionPayload.Action.ENTER_KAMUI) { KamuiTravel.enter(player); return; }
-        if (payload.action() == WaypointActionPayload.Action.LEAVE_KAMUI) { KamuiTravel.leave(player); return; }
-        if (payload.action() == WaypointActionPayload.Action.TRAVEL) { travel(player, payload.slot()); return; }
+if (payload.action() == WaypointActionPayload.Action.ENTER_KAMUI) { KamuiChannelHandler.startEnterChannel(player); return; }
+        if (payload.action() == WaypointActionPayload.Action.LEAVE_KAMUI) { KamuiChannelHandler.startLeaveChannel(player); return; }
+        if (payload.action() == WaypointActionPayload.Action.TRAVEL) { KamuiChannelHandler.startTravelToWaypoint(player, payload.slot()); return; }
         int slot = payload.slot();
         if (!KamuiWaypoints.isValidSlot(slot)) {
             return;
@@ -54,19 +53,6 @@ if (payload.action() == WaypointActionPayload.Action.ENTER_KAMUI) { KamuiTravel.
 
         player.setData(TobiMod.KAMUI_WAYPOINTS, updated);
         sync(player, updated);
-    }
-
-    /**
-     * Saves the player's own current position. Coordinates from the client are
-     * intentionally ignored so a waypoint can only ever point somewhere the
-     * player actually stood.
-     */
-    private static void travel(ServerPlayer player, int slot) {
-        if (!KamuiWaypoints.isValidSlot(slot)) return;
-        KamuiWaypoint point = player.getData(TobiMod.KAMUI_WAYPOINTS).get(slot);
-        if (point.isEmpty()) return;
-        ServerLevel destination = player.server.getLevel(point.dimension());
-        if (destination != null) player.teleportTo(destination, point.x(), point.y(), point.z(), java.util.Set.of(), player.getYRot(), player.getXRot());
     }
 
     private static KamuiWaypoints save(ServerPlayer player, KamuiWaypoints book, int slot, String requestedName) {

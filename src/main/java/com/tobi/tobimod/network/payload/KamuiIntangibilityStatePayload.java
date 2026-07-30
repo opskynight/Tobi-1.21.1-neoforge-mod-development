@@ -1,7 +1,6 @@
 package com.tobi.tobimod.network.payload;
 
 import com.tobi.tobimod.TobiMod;
-import com.tobi.tobimod.client.sound.KamuiSoundManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -71,13 +70,6 @@ public record KamuiIntangibilityStatePayload(
 
     public static void handle(KamuiIntangibilityStatePayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
-            // Start or stop the channel sound based on the new state.
-            if (payload.active()) {
-                KamuiSoundManager.start();
-            } else {
-                KamuiSoundManager.stop();
-            }
-
             clientKamuiActive = payload.active();
             clientUnderground = payload.underground();
             clientRemainingSeconds = payload.active() ? Math.max(0, payload.remainingSeconds()) : 0;
