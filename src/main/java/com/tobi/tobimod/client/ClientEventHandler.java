@@ -3,7 +3,6 @@ package com.tobi.tobimod.client;
 import com.tobi.tobimod.TobiMod;
 import com.tobi.tobimod.client.keybinds.ModKeybindings;
 import com.tobi.tobimod.client.screens.KamuiNavigationScreen;
-import com.tobi.tobimod.client.sound.KamuiSoundManager;
 import com.tobi.tobimod.network.payload.KamuiIntangibilityStatePayload;
 import com.tobi.tobimod.network.payload.KamuiIntangibilityTogglePayload;
 import net.minecraft.client.Minecraft;
@@ -15,25 +14,16 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 @EventBusSubscriber(modid = TobiMod.MOD_ID, value = Dist.CLIENT)
 public final class ClientEventHandler {
-    private static int enterChannelTicks;
     private ClientEventHandler() {}
 
     public static void beginEnterChannel() {
-        enterChannelTicks = 60;
-        KamuiSoundManager.start();
+        // Channel sound removed per user request.
     }
 
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Pre event) {
         Minecraft minecraft = Minecraft.getInstance();
         KamuiIntangibilityStatePayload.tickClientTimer();
-        if (enterChannelTicks > 0 && --enterChannelTicks == 0) KamuiSoundManager.stop();
-
-        // Safety net: if the player disconnects or the world unloads while the
-        // channel sound is playing, stop it so it doesn't leak.
-        if (KamuiSoundManager.isPlaying() && (minecraft.player == null || minecraft.level == null)) {
-            KamuiSoundManager.stop();
-        }
 
         // Only underground mode applies client no-clip. Surface mode is ordinary
         // vanilla collision/movement while the server still grants Kamui defense.

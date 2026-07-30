@@ -64,7 +64,7 @@ public final class KamuiIntangibilityHandler {
         syncState(player, state);
     }
 
-    private static void deactivate(Player player, KamuiIntangibilityState state, long now, boolean manual) {
+    static void deactivate(Player player, KamuiIntangibilityState state, long now, boolean manual) {
         if (!state.isActive()) {
             return;
         }

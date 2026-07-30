@@ -2,21 +2,23 @@ package com.tobi.tobimod.client.screens;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.tobi.tobimod.client.keybinds.ModKeybindings;
+import com.tobi.tobimod.network.payload.ManualTeleportPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.gui.widget.ExtendedButton;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.function.Predicate;
 
 /**
  * Manual coordinate entry, reached from the wheel's centre button.
  *
- * <p>Transfers are same-dimension only by design. The Teleport button is
- * disabled until the shared three-second vulnerable channel exists; the server
- * will validate build limits, the world border and safe arrival at that point.
+ * <p>Transfers are same-dimension only by design. The server starts a 3-second
+ * vulnerable channel before executing the teleport, and validates build limits,
+ * the world border and safe arrival.
  */
 public class ManualTeleportScreen extends Screen {
     private static final int PANEL_WIDTH = 240;
@@ -66,10 +68,8 @@ public class ManualTeleportScreen extends Screen {
                 104,
                 18,
                 Component.translatable("screen.tobimod.teleport"),
-                button -> {}
+                button -> doTeleport()
         );
-        // Inert until the shared channel system exists.
-        teleportButton.active = false;
         addRenderableWidget(teleportButton);
 
         addRenderableWidget(new ExtendedButton(
@@ -131,6 +131,19 @@ public class ManualTeleportScreen extends Screen {
         );
 
         super.render(guiGraphics, mouseX, mouseY, partialTicks);
+    }
+
+    /** Reads the three coordinate fields and sends a server teleport request. */
+    private void doTeleport() {
+        try {
+            double x = Double.parseDouble(this.xField.getValue());
+            double y = Double.parseDouble(this.yField.getValue());
+            double z = Double.parseDouble(this.zField.getValue());
+            PacketDistributor.sendToServer(new ManualTeleportPayload(x, y, z));
+            onClose();
+        } catch (NumberFormatException ignored) {
+            // Fields are validated as the user types, so this should never fire.
+        }
     }
 
     /** Permits partial input such as "-" or "12." while typing. */

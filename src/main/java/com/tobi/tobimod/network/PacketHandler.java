@@ -9,6 +9,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import com.tobi.tobimod.common.waypoints.WaypointHandler;
+import com.tobi.tobimod.network.payload.ManualTeleportPayload;
 import com.tobi.tobimod.network.payload.WaypointActionPayload;
 import com.tobi.tobimod.network.payload.WaypointSyncPayload;
 
@@ -40,6 +41,12 @@ public final class PacketHandler {
                 KamuiIntangibilityTogglePayload.TYPE,
                 KamuiIntangibilityTogglePayload.STREAM_CODEC,
                 KamuiIntangibilityHandler::handleTogglePayload
+        );
+
+        registrar.playToServer(
+                ManualTeleportPayload.TYPE,
+                ManualTeleportPayload.STREAM_CODEC,
+                ManualTeleportPayload::handle
         );
 
         registrar.playToClient(
