@@ -1,13 +1,10 @@
 {
   "type": "tobimod:kamui_void",
   "generator": {
-    "type": "minecraft:flat",
-    "settings": {
-      "layers": [],
-      "biome": "minecraft:the_void",
-      "lakes": false,
-      "features": false,
-      "structure_overrides": []
+    "type": "tobimod:kamui",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "minecraft:the_void"
     }
   }
 }

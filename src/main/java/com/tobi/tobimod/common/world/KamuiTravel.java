@@ -7,16 +7,15 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 
-/** Shared, server-authoritative travel rules for the Kamui pocket dimension. */
 public final class KamuiTravel {
     private static final String ORIGIN = TobiMod.MOD_ID + ".kamui_origin";
     private static final int MAX_SCAN_Y = 383;
 
     private KamuiTravel() {}
 
-    /** Teleports to the fixed X/Z origin, standing safely above whatever column exists there. */
     public static void enter(ServerPlayer player) {
         ServerLevel kamui = player.server.getLevel(TobiMod.KAMUI_DIMENSION);
         if (kamui == null) return;
@@ -32,7 +31,6 @@ public final class KamuiTravel {
         teleport(player, kamui, 0.5D, safeY(kamui), 0.5D);
     }
 
-    /** Returns to the saved origin; overworld spawn is the safe fallback if it is unavailable. */
     public static void leave(ServerPlayer player) {
         var tag = player.getPersistentData().getCompound(ORIGIN);
         ServerLevel destination = player.server.overworld();
@@ -53,10 +51,6 @@ public final class KamuiTravel {
         player.getPersistentData().remove(ORIGIN);
     }
 
-    /**
-     * Travels to a saved waypoint slot.
-     * Called after the 3-second channel completes.
-     */
     public static void travelToWaypoint(ServerPlayer player, int slot) {
         KamuiWaypoints book = player.getData(TobiMod.KAMUI_WAYPOINTS);
         if (!KamuiWaypoints.isValidSlot(slot)) return;
@@ -68,21 +62,20 @@ public final class KamuiTravel {
         }
     }
 
-    /**
-     * Travels to arbitrary coordinates within the player's current dimension.
-     * Called after the 3-second channel completes.
-     */
     public static void travelToCoords(ServerPlayer player, double x, double y, double z) {
         teleport(player, (ServerLevel) player.level(), x, y, z);
     }
 
     private static int safeY(ServerLevel level) {
+        var originChunk = new ChunkPos(BlockPos.ZERO);
+        level.getChunk(originChunk.x, originChunk.z);
+
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(0, MAX_SCAN_Y, 0);
         for (int y = MAX_SCAN_Y; y >= level.getMinBuildHeight(); y--) {
             pos.setY(y);
             if (!level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) return y + 1;
         }
-        return 64; // defensive fallback if the void has not generated at the origin yet
+        return 64;
     }
 
     private static void teleport(ServerPlayer player, ServerLevel level, double x, double y, double z) {
