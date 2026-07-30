@@ -15,12 +15,19 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 @EventBusSubscriber(modid = TobiMod.MOD_ID, value = Dist.CLIENT)
 public final class ClientEventHandler {
+    private static int enterChannelTicks;
     private ClientEventHandler() {}
+
+    public static void beginEnterChannel() {
+        enterChannelTicks = 60;
+        KamuiSoundManager.start();
+    }
 
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Pre event) {
         Minecraft minecraft = Minecraft.getInstance();
         KamuiIntangibilityStatePayload.tickClientTimer();
+        if (enterChannelTicks > 0 && --enterChannelTicks == 0) KamuiSoundManager.stop();
 
         // Safety net: if the player disconnects or the world unloads while the
         // channel sound is playing, stop it so it doesn't leak.

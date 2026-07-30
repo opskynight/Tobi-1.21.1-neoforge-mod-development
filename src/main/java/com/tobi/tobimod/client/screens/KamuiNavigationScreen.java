@@ -26,6 +26,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.gui.widget.ExtendedButton;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.joml.Matrix4f;
+import com.tobi.tobimod.client.ClientEventHandler;
 
 /**
  * The C navigation wheel.
@@ -117,10 +118,31 @@ public class KamuiNavigationScreen extends Screen {
                 104,
                 18,
                 selfKamuiLabel(),
-button -> PacketDistributor.sendToServer(new WaypointActionPayload(
-                        isInsideKamuiVoid() ? WaypointActionPayload.Action.LEAVE_KAMUI : WaypointActionPayload.Action.ENTER_KAMUI,
-                        -1, ""))
+                button -> {
+                    if (isInsideKamuiVoid()) {
+                        PacketDistributor.sendToServer(
+                                new WaypointActionPayload(
+                                        WaypointActionPayload.Action.LEAVE_KAMUI,
+                                        -1,
+                                        ""
+                                )
+                        );
+                    } else {
+                        // Start the client-side three-second channel sound/timer.
+                        ClientEventHandler.beginEnterChannel();
+
+                        // The server waits 60 ticks before teleporting.
+                        PacketDistributor.sendToServer(
+                                new WaypointActionPayload(
+                                        WaypointActionPayload.Action.ENTER_KAMUI,
+                                        -1,
+                                        ""
+                                )
+                        );
+                    }
+                }
         );
+
         selfKamuiButton.active = true;
         addRenderableWidget(selfKamuiButton);
 
@@ -130,13 +152,19 @@ button -> PacketDistributor.sendToServer(new WaypointActionPayload(
                 104,
                 18,
                 Component.translatable("screen.tobimod.travel_to_waypoint"),
-button -> {
+                button -> {
                     if (KamuiWaypoints.isValidSlot(slotSelected)) {
-                        PacketDistributor.sendToServer(new WaypointActionPayload(
-                                WaypointActionPayload.Action.TRAVEL, slotSelected, ""));
+                        PacketDistributor.sendToServer(
+                                new WaypointActionPayload(
+                                        WaypointActionPayload.Action.TRAVEL,
+                                        slotSelected,
+                                        ""
+                                )
+                        );
                     }
                 }
         );
+
         teleportButton.active = false;
         addRenderableWidget(teleportButton);
 
