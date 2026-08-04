@@ -178,25 +178,28 @@ Surface mode deliberately uses normal collision. Mobs physically walking into th
 
 ---
 
-## 4.1 Surface / Underground Movement — Final Intended Design
+### 4.1 Surface / Underground Movement — Final Intended Design
 
-### Surface Mode
+### Surface Mode (current implementation)
 
-While Combat Kamui is active on the surface:
+While Combat Kamui is active on the surface, the player walks like Obito —
+a normal player with phasing, anchored to whatever block is below their feet:
 
 ```text
-Normal survival movement
-Normal gravity
-Normal jumping
-Normal block collision
-Normal item/block interaction
-No free flight
-No hovering
-No standard wall/mob phasing
-Kamui defensive protection remains active
-```
-
-This avoids the player looking like they have Creative/Spectator flight.
+Real vanilla gravity (no setNoGravity — avoids the "floating at a fixed Y" feel)
+Real vanilla jumping — normal jump arc, normal fall
+Block collision is BYPASSED (noPhysics = true) — the player phases through
+  any wall, ceiling, mountain, or building in the world.
+A custom floor-anchor helper glues the player to the highest solid block
+  under their feet each tick, recovering "stand on a block" behavior
+  without re-enabling block collision.
+Stair steps, slabs, and uneven terrain work via the floor-anchor:
+  search depth 1.25 blocks, snap tolerance 1.0 block, instant snap up
+  on encounter (no fall/jitter on stairs).
+Walking off a ledge: no block under feet → no snap → vanilla gravity
+  pulls the player down until they find another floor.
+Shift still sinks the player into the current floor → underground mode.
+Kamui defensive protection (damage/projectile/knockback) remains active.
 
 ### Intentional terrain entry
 
