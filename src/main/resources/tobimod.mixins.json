@@ -4,7 +4,8 @@
   "package": "com.tobi.tobimod.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "LivingEntityKamuiMixin"
+    "LivingEntityKamuiMixin",
+    "EntityKamuiMixin",
   ],
   "client": [],
   "injectors": {

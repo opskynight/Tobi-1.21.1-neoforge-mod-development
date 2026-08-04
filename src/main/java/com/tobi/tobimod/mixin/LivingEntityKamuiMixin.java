@@ -11,35 +11,36 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Applies Underground Kamui physics at the living-entity effect lifecycle point.
+ * Enforces Kamui virtual-floor physics at the living-entity tick level.
  *
- * This replaces the hidden MobEffect. The server reads the player Attachment;
- * the client reads the compact state packet sent when the mode changes.
+ * <p>When Kamui is active this sets {@code noPhysics = true} and resets fall
+ * distance every tick so the player never accumulates fall damage.
+ * Gravity and onGround are handled by
+ * {@link com.tobi.tobimod.common.abilities.KamuiIntangibilityHandler}
+ * in {@code PlayerTickEvent.Post} so that they run after travel().
  */
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityKamuiMixin {
     @Inject(method = "tickEffects", at = @At("TAIL"))
-    private void tobimod$applyUndergroundKamuiPhysics(CallbackInfo callbackInfo) {
+    private void tobimod$applyKamuiPhysics(CallbackInfo callbackInfo) {
         LivingEntity livingEntity = (LivingEntity) (Object) this;
         if (!(livingEntity instanceof Player player)) {
             return;
         }
 
-        boolean underground;
+        boolean active;
         if (player.level().isClientSide()) {
-            underground = KamuiIntangibilityStatePayload.isClientUnderground();
+            active = KamuiIntangibilityStatePayload.isClientKamuiActive();
         } else {
             KamuiIntangibilityState state = player.getExistingDataOrNull(TobiMod.KAMUI_INTANGIBILITY_STATE);
-            underground = state != null && state.isActive() && state.isUnderground();
+            active = state != null && state.isActive();
         }
 
-        if (!underground) {
+        if (!active) {
             return;
         }
 
         player.noPhysics = true;
-        player.setNoGravity(true);
-        player.setOnGround(false);
         player.resetFallDistance();
     }
 }
