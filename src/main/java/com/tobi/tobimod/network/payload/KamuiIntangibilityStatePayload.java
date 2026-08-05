@@ -11,16 +11,18 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
  * Compact server-to-client Kamui state snapshot.
- * The timer is received only on state changes; the client reduces its displayed
- * seconds locally once per second, with no timer packet spam.
+ *
+ * <p>Carries the virtual floor Y level so the client can do accurate
+ * prediction (clamping Y, setting onGround, etc.) without waiting for
+ * server corrections.
  */
 public record KamuiIntangibilityStatePayload(
         boolean active,
-        boolean underground,
+        double floorY,
         int remainingSeconds
 ) implements CustomPacketPayload {
     private static boolean clientKamuiActive;
-    private static boolean clientUnderground;
+    private static double clientFloorY;
     private static int clientRemainingSeconds;
     private static int clientTimerTicks;
 
@@ -31,8 +33,8 @@ public record KamuiIntangibilityStatePayload(
             StreamCodec.composite(
                     ByteBufCodecs.BOOL,
                     KamuiIntangibilityStatePayload::active,
-                    ByteBufCodecs.BOOL,
-                    KamuiIntangibilityStatePayload::underground,
+                    ByteBufCodecs.DOUBLE,
+                    KamuiIntangibilityStatePayload::floorY,
                     ByteBufCodecs.INT,
                     KamuiIntangibilityStatePayload::remainingSeconds,
                     KamuiIntangibilityStatePayload::new
@@ -43,8 +45,14 @@ public record KamuiIntangibilityStatePayload(
         return TYPE;
     }
 
-    public static boolean isClientUnderground() {
-        return clientKamuiActive && clientUnderground;
+    /** Returns true if Kamui is active on the client side. */
+    public static boolean isClientKamuiActive() {
+        return clientKamuiActive;
+    }
+
+    /** Returns the server-synced virtual floor Y level (client side). */
+    public static double getClientFloorY() {
+        return clientFloorY;
     }
 
     public static boolean shouldRenderTimer() {
@@ -71,12 +79,13 @@ public record KamuiIntangibilityStatePayload(
     public static void handle(KamuiIntangibilityStatePayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             clientKamuiActive = payload.active();
-            clientUnderground = payload.underground();
+            clientFloorY = payload.active() ? payload.floorY() : 0.0;
             clientRemainingSeconds = payload.active() ? Math.max(0, payload.remainingSeconds()) : 0;
             clientTimerTicks = 0;
 
             Player player = context.player();
-            if (player != null && !payload.underground() && !player.isSpectator()) {
+            if (player != null && !payload.active() && !player.isSpectator()) {
+                // Kamui just deactivated — restore vanilla physics
                 player.noPhysics = false;
                 player.setNoGravity(false);
             }

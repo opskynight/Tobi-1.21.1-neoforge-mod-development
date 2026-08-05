@@ -42,38 +42,37 @@ When an older document conflicts with this one, **this document wins**.
 
 # 2. Project Structure / Current Foundation
 
-Current important project areas:
-
 ```text
 com.tobi.tobimod/
 ├── client/
-│   ├── ClientEventHandler.java
-│   ├── hud/                         # planned crosshair timer renderer
+│   ├── ClientEventHandler.java       # client-side virtual floor + keybinds
+│   ├── hud/KamuiTimerHud.java        # crosshair timer renderer
 │   ├── keybinds/ModKeybindings.java
-│   └── screens/                     # current GUI prototypes; will be refactored
+│   └── screens/                      # KamuiNavigationScreen, ManualTeleport, WaypointEditor
 ├── common/
 │   ├── abilities/
-│   │   ├── KamuiIntangibilityHandler.java
-│   │   └── KamuiIntangibilityState.java
-│   ├── capabilities/TobiPlayerData.java  # incomplete/old; redesign later
+│   │   ├── KamuiIntangibilityHandler.java   # server-side virtual floor system
+│   │   ├── KamuiIntangibilityState.java     # Attachment: floorY, sinkAccumulator, jumpEscapeConsumed
+│   │   └── KamuiChannelHandler.java         # 3-second channel for travel/absorption
+│   ├── capabilities/TobiPlayerData.java
 │   └── ModAttributes.java
-├── mixin/LivingEntityKamuiMixin.java
+├── mixin/
+│   ├── LivingEntityKamuiMixin.java   # noPhysics + resetFallDistance every tick
+│   └── EntityKamuiMixin.java         # prevents isInWall suffocation while Kamui active
 ├── network/
 │   ├── PacketHandler.java
 │   └── payload/
 │       ├── KamuiIntangibilityTogglePayload.java
-│       └── KamuiIntangibilityStatePayload.java
+│       └── KamuiIntangibilityStatePayload.java  # carries floorY (double), not underground bool
 └── TobiMod.java
 ```
 
-Current mixin registration is required in `META-INF/neoforge.mods.toml`:
+Mixin registration in `META-INF/neoforge.mods.toml`:
 
 ```toml
 [[mixins]]
 config="tobimod.mixins.json"
 ```
-
-The leading `#` comments must not be present. If the block is commented, underground no-clip does not run.
 
 ---
 
@@ -158,7 +157,7 @@ Kamui active
 AND not inside the 3-tick attack vulnerability window
 ```
 
-Implementation direction:
+Implementation:
 
 - Use `EntityInvulnerabilityCheckEvent` for early damage immunity.
 - Use projectile impact handling for vanilla arrows, tridents, fireballs, etc.
@@ -173,138 +172,106 @@ Cancel `LivingKnockBackEvent` while the player is protected.
 ### Explosion knockback
 Explosion force may bypass `LivingKnockBackEvent`. Remove protected Kamui players from `ExplosionEvent.Detonate` affected entities so Creepers/TNT do not push them.
 
-### Surface physical pushing
-Surface mode deliberately uses normal collision. Mobs physically walking into the player may still cause ordinary entity pushing. This is separate from combat/explosion knockback and can be revisited later.
-
 ---
 
-### 4.1 Surface / Underground Movement — Final Intended Design
+## 4.1 Virtual Floor System — Current Implementation
 
-### Surface Mode (current implementation)
+### Design philosophy
 
-While Combat Kamui is active on the surface, the player walks like Obito —
-a normal player with phasing, anchored to whatever block is below their feet:
+Obito walks through walls with normal physics — no floating, no flight, no hover. He stands on the ground, walks into a wall, and phases through it. Gravity still applies. He sinks through floors by choice (shift) and rises by jumping. **No creative flight. No `setNoGravity(true)`.**
 
-```text
-Real vanilla gravity (no setNoGravity — avoids the "floating at a fixed Y" feel)
-Real vanilla jumping — normal jump arc, normal fall
-Block collision is BYPASSED (noPhysics = true) — the player phases through
-  any wall, ceiling, mountain, or building in the world.
-A custom floor-anchor helper glues the player to the highest solid block
-  under their feet each tick, recovering "stand on a block" behavior
-  without re-enabling block collision.
-Stair steps, slabs, and uneven terrain work via the floor-anchor:
-  search depth 1.25 blocks, snap tolerance 1.0 block, instant snap up
-  on encounter (no fall/jitter on stairs).
-Walking off a ledge: no block under feet → no snap → vanilla gravity
-  pulls the player down until they find another floor.
-Shift still sinks the player into the current floor → underground mode.
-Kamui defensive protection (damage/projectile/knockback) remains active.
+### Core mechanism
 
-### Intentional terrain entry
-
-The player deliberately enters terrain by holding Shift.
-
-#### Floor entry
+While Kamui is active, every tick:
 
 ```text
-Kamui active + Surface Mode + Shift
-        ↓
-If no solid wall is directly ahead:
-Move player downward by 0.15 blocks/tick
-        ↓
-Once head enters a solid collision block:
-Underground Mode begins
+1. noPhysics = true         → player passes through ALL blocks (walls, floors, everything)
+2. Gravity stays vanilla    → player falls naturally under gravity
+3. No flight                → no creative flight, no flying speed boost
+4. Virtual floor at floorY  → if player.Y < floorY while falling, clamp Y = floorY, zero Y vel
+5. resetFallDistance()       → no fall damage
 ```
 
-This is the mod equivalent of the old datapack idea:
+The player moves with vanilla physics. Gravity pulls them down, and they "land" on the virtual floor exactly like landing on a real block. The floor just exists at `floorY`, even if it's inside solid stone.
 
-```mcfunction
-tp @s ~ ~-0.15 ~
-```
+### Jitter prevention
 
-#### Horizontal wall entry
+Gravity is applied inside `travel()`, which runs between Pre-tick and Post-tick. Without intervention, the player falls ~0.003 blocks per tick below floorY and gets clamped back, causing visible screen flicker (63.99999 → 64.0).
+
+**Fix:** In Pre-tick, when the player is at floorY and not rising:
+1. Snap Y to exactly floorY
+2. Zero Y velocity
+3. Set `onGround = true`
+4. Temporarily set `noGravity = true` (prevents travel() from applying the -0.08 pull)
+
+In Post-tick, immediately restore `noGravity = false` so gravity works normally for jumps and falls.
+
+### Vertical navigation
 
 ```text
-Kamui active + Surface Mode + Shift + looking at a nearby solid wall
-        ↓
-Nudge player forward by 0.15 blocks/tick in horizontal look direction
-        ↓
-Once head enters terrain:
-Underground Mode begins
+Jump (press)  → floorY += 1 (once per press, consumed flag prevents 20 raises/sec)
+Shift (hold)  → floorY -= 1 every 5 ticks (continuous sinking, 0.25s per block)
+Gap walk      → floorY auto-adjusts down to nearest terrain below (findSupportBelow scan)
 ```
 
-This is intentional phase entry, not automatic phasing. Normal walking into a wall should remain normal collision.
+**Jump detection:** Compares Y velocity before and after `travel()`. If `yVelBeforeTravel ≤ 0 && yVelAfterTravel > 0`, a jump was processed. A `jumpEscapeConsumed` flag prevents holding jump from raising floorY 20 times per second. The flag resets when the player lands back on the virtual floor.
 
-### Underground Mode
+**Sink detection:** Shift must be held AND player must be on the virtual floor (`|Y - floorY| < ε`). An accumulator counts ticks; every 5 ticks, floorY decreases by 1 and `findSupportBelow` scans for the new support level.
 
-When the player’s head is inside a solid collision block:
+### Terrain support scan (`findSupportBelow`)
+
+Scans downward from the current floorY in the block column directly below the player's center X/Z. Returns the Y of the first solid block's top surface (blockY + 1.0 for full blocks). If no solid is found within 128 blocks, keeps current floorY to prevent void fall.
+
+### Floor initialization
+
+On activation, `floorY = player.getY()`. Then `findSupportBelow` scans down to find the actual terrain support. This handles the case where the player activates Kamui while mid-air (floorY adjusts to the next solid below).
+
+### Deactivation
+
+When Kamui deactivates:
+- Restore original `noPhysics`, `noGravity`, `flying`, `flyingSpeed`
+- Remove any lingering `CREATIVE_FLIGHT` attribute modifier
+- Clear `PRE_TRAVEL_Y_VEL` tracking map
+
+If the player is inside solid blocks when Kamui deactivates, vanilla `isInWall()` suffocation damage kicks in naturally (the `EntityKamuiMixin` only suppresses suffocation while Kamui is active).
+
+### Mixin architecture
 
 ```text
-No-clip enabled
-No gravity enabled
-Temporary internal flight enabled
-Fast movement: 2× normal Creative flight speed
-WASD: horizontal movement
-Space: up
-Shift: down
+LivingEntityKamuiMixin:
+  - Injects at tickEffects TAIL
+  - Sets noPhysics = true + resetFallDistance while Kamui active
+  - Server reads Attachment; client reads KamuiIntangibilityStatePayload
+
+EntityKamuiMixin:
+  - Injects at isInWall HEAD, cancellable
+  - Returns false while Kamui active (prevents suffocation inside blocks)
+  - Server reads Attachment; client reads KamuiIntangibilityStatePayload
 ```
 
-The player never switches to Spectator mode.
+### Client-side prediction
 
-### Exit Underground Mode
-
-When the player reaches three clear collision blocks of surface space for 3 stable ticks:
+The client mirrors the server's virtual floor logic to keep prediction smooth:
 
 ```text
-Underground flight disabled
-Velocity/momentum cleared
-No-clip disabled
-Normal gravity/collision restored
-Kamui defensive state remains active
+Pre-tick:  same jitter prevention (snap Y, zero Y vel, setNoGravity(true) when on floor)
+Post-tick: restore noGravity(false), safety-net floor clamp
 ```
 
-A solid block directly below is not required for exit. If the player exits slightly above ground, normal gravity brings them down. This specifically prevents infinite upward flight after emerging.
+`KamuiIntangibilityStatePayload` carries `floorY` (double) so the client knows the exact floor level.
 
-### Underground mob aggro
-
-On the one transition into Underground Mode:
+### What was removed (replaced by virtual floor)
 
 ```text
-Find nearby mobs within 32 blocks that currently target the player
-Clear their target once
+❌ Surface / Underground two-mode system
+❌ isHeadInsideSolidBlock / hasValidSurfaceSpace mode detection
+❌ updateMovementMode / surfaceClearTicks
+❌ tryEnterWall() shift-nudge into walls
+❌ sinkIntoFloor() vertical teleport
+❌ setNoGravity(true) — gravity stays vanilla at all times
+❌ Creative flight + CREATIVE_FLIGHT attribute modifier
+❌ Underground flying speed constant
 ```
-
-Do not repeat this every tick. On surface return, vanilla AI can naturally reacquire the player.
-
-## Technical implementation status
-
-- The initial `noPhysics + noGravity` approach did not produce usable player no-clip.
-- The Intangible reference mod demonstrated that timing matters.
-- Hidden custom effect was used successfully as a temporary movement driver.
-- Current desired architecture removes the stealable effect and uses:
-
-```text
-Attachment-only Kamui status
-+ targeted LivingEntity mixin
-```
-
-The mixin applies underground no-clip at the correct entity lifecycle point.
-
-### Important mixin architecture
-
-```text
-Server:
-Read Kamui Attachment state.
-
-Client:
-Read compact `KamuiIntangibilityStatePayload` state.
-
-Mixin:
-Only applies noPhysics/noGravity while Underground Mode is true.
-```
-
-No Kamui potion/status effect should remain once the attachment-only version is complete; modded enemies cannot steal an Attachment as a potion effect.
 
 ---
 
@@ -321,9 +288,9 @@ Custom particles
 Sharingan particle effects
 ```
 
-## Planned timer HUD
+## Current timer HUD
 
-Show only a minimal timer below the crosshair while Combat Kamui is active:
+Implemented. Shows a minimal timer below the crosshair while Combat Kamui is active:
 
 ```text
         +
@@ -345,7 +312,7 @@ Rules:
 ### Performance
 
 - One/two text/rectangle draw calls per rendered frame: negligible client cost.
-- Server sends state only when Kamui activates/deactivates or movement state changes.
+- Server sends state only when Kamui activates/deactivates or floorY changes.
 - Client counts displayed seconds down locally every 20 client ticks.
 - No timer packets every tick.
 
@@ -498,8 +465,6 @@ Direct magic attack
 Direct entity attacker
 ```
 
-For modded DOT, no universal Minecraft label exists. The robust code rule is to cancel only for direct attacker/projectile/explosion/direct combat sources, which naturally ignores most DOT effects.
-
 ## Cooldowns — finalized
 
 ```text
@@ -512,28 +477,6 @@ Interrupted absorption cooldown: 3 seconds
 There is intentionally no gameplay target cap.
 
 However, all entity transfer/release work must use an **unbounded queue processed in batches**, e.g. 10 entities/tick.
-
-Example:
-
-```text
-120 mobs captured
-→ all are valid
-→ after 3-second channel, move 10/tick
-→ all transfer over 12 ticks
-```
-
-This is not a target limit. It prevents one server tick from doing 120 cross-dimension teleports.
-
-During a large transfer queue, caster remains vulnerable. If interrupted:
-
-```text
-Already transferred mobs stay in Kamui Void
-Remaining mobs are released
-```
-
-### Performance warning
-
-Unlimited targets can still lag if the player intentionally uses it in an entity-crammed farm. Batching prevents a single catastrophic teleport spike but cannot make thousands of loaded mobs free.
 
 ---
 
@@ -552,7 +495,7 @@ Shift + X in any non-Kamui dimension
 → release every entity currently stored in Kamui Void
 ```
 
-The likely intended destination is the player’s current location. This needs final confirmation before code.
+The likely intended destination is the player's current location. This needs final confirmation before code.
 
 Release must also use an unlimited batched queue, not all entities in one tick.
 
@@ -563,8 +506,6 @@ Shift + X inside Kamui Void
 → release entities only in the same 3-block, 180° forward field
 ```
 
-This permits controlled selection/release within the pocket dimension.
-
 ---
 
 # 8. Kamui Dimension
@@ -573,7 +514,7 @@ This permits controlled selection/release within the pocket dimension.
 
 The Kamui dimension is **shared** by anyone with the Kamui ability, which is canon-appropriate.
 
-Primary use is single-player, so it is effectively private in normal use. Multiplayer privacy/isolation can be redesigned later.
+Primary use is single-player, so it is effectively private in normal use.
 
 ## Dimension ID
 
@@ -591,16 +532,6 @@ No natural mob spawning
 No ordinary portal access
 ```
 
-It is a shared holding/pocket dimension for:
-
-```text
-Absorbed entities
-Self Kamui entry
-Return/origin travel
-```
-
-World generation should be intentionally simple and reliable. Dimension implementation should ensure a safe spawn/arrival surface and pre-load the relevant destination chunk before transfer queues begin.
-
 ---
 
 # 9. Self Kamui Absorption / Round-Trip Warp
@@ -612,8 +543,6 @@ C = Kamui navigation / self transfer system
 ```
 
 ## Self entry behavior
-
-The player chooses Self Kamui entry from the planned C navigation GUI.
 
 ```text
 Save exact origin:
@@ -640,8 +569,6 @@ While inside Kamui Void, choose the return/origin option:
 Return to saved exact origin
 ```
 
-If saved location is unsafe, find a small nearby safe space; use a defined fallback only if no safe location can be found.
-
 ## Channel damage rule
 
 Same as absorption:
@@ -659,23 +586,12 @@ The C system is planned as a radial/navigation GUI. It combines self warp, waypo
 
 ## Input conflict — RESOLVED
 
-Earlier ideas said both:
-
-```text
-Hold C to channel Self Kamui
-Hold C to open a radial GUI
-```
-
-These cannot happen from the same hold at the same time.
-
 **Final decision:** C only ever opens the wheel. C never starts a channel directly.
 
 ```text
 Press/hold C → open radial wheel
 Choose an option → start that option's 3-second channel
 ```
-
-Every action selected from the wheel starts its own 3-second vulnerable channel.
 
 ## Main radial wheel
 
@@ -699,18 +615,6 @@ Inside  tobimod:kamui_void → "Return to Origin"
 The middle of the wheel is a **button labelled "Choose Coordinates"**. It does not
 teleport and does not start a channel. Clicking it navigates away from the wheel
 to the manual coordinate selection screen.
-
-```text
-Click center "Choose Coordinates"
-        ↓
-Wheel closes / is replaced
-        ↓
-Manual coordinate selection screen opens
-        ↓
-Channel only starts after Teleport is confirmed there
-```
-
-Do not cram editable X/Y/Z boxes inside the small wheel.
 
 ## Manual coordinate page
 
@@ -748,46 +652,7 @@ X/Y/Z
 Dimension ID
 ```
 
-Yaw/pitch is **not** stored. The earlier "optional yaw/pitch" idea is dropped;
-arrival facing is whatever the player is already facing.
-
-### Empty slot
-
-```text
-[ + ]
-```
-
-Click:
-
-```text
-Save current standing position
-Enter or edit name
-```
-
-### Filled slot
-
-Click:
-
-```text
-Start 3-second vulnerable Kamui transfer
-Teleport cross-dimension to stored location
-```
-
-Saved waypoint transfer is cross-dimensional because the player previously visited and saved that destination.
-
-### Required management
-
-```text
-Create waypoint
-Rename waypoint
-Delete waypoint
-Select waypoint
-Teleport to waypoint
-```
-
-## GUI status
-
-Eventually show disabled/available/cooldown state, but no need for fancy icons or external UI libraries. Vanilla item icons and built-in buttons are enough.
+Yaw/pitch is **not** stored. Arrival facing is whatever the player is already facing.
 
 ---
 
@@ -868,14 +733,6 @@ Target attacks nearby hostile mobs / follows caster loosely
 Players/bosses/passive animals/already-controlled targets excluded
 ```
 
-Implementation guidance:
-
-```text
-Do not rewrite every mob's goal selector.
-Use a controlled state/effect plus periodic local target assignment.
-Search nearest hostile target every 10 ticks, not every tick.
-```
-
 This remains the highest AI-risk ability and should be built late.
 
 ---
@@ -903,80 +760,37 @@ Dropped receiver vanishes after 5 seconds
 Cannot be stored/transferred
 ```
 
-Performance rule:
-
-```text
-Store target UUID + expiry tick
-Do not scan all loaded entities every tick
-Recommended tag cap was previously 16, but can be revisited if desired
-```
-
-User has reported the existing percentage-health drain concept works in early testing.
-
 ---
 
 # 15. Keybind Map — Current / Planned
 
 | Key | Ability | Status |
 |---|---|---|
-| `R` | Combat Kamui Intangibility | Implemented core; ongoing polish |
-| `X` | Kamui Absorption / Release | New final design, not yet implemented |
-| `Shift + X` | Kamui Release | New final design, not yet implemented |
-| `C` | Kamui Navigation / Self Warp / Waypoints | GUI design locked conceptually; interaction details unresolved |
-| `G` | Kamui Travel | Original planned ability |
+| `R` | Combat Kamui Intangibility | **Implemented — virtual floor system** |
+| `X` | Kamui Absorption / Release | Designed, not yet implemented |
+| `Shift + X` | Kamui Release | Designed, not yet implemented |
+| `C` | Kamui Navigation / Self Warp / Waypoints | GUI design locked; not yet implemented |
+| `G` | Kamui Travel | Planned |
 | `V` | Basic Genjutsu | Planned |
 | `B` | Advanced Genjutsu | Planned |
-| `F` | Black Receivers | Early implementation exists / planned refinement |
-| `Z` | Old Location Marker/radial prototype | Deprecated direction; likely absorbed into C navigation GUI |
-| `O` | Optional future ability dashboard | Optional future feature |
+| `F` | Black Receivers | Early implementation exists |
 
 All default mappings must remain rebindable in Minecraft Controls.
 
 ---
 
-# 16. GUI / HUD Direction
-
-## Current priority
-
-1. Finish the C Kamui Navigation radial/waypoint GUI concept.
-2. Use the small R Kamui timer below crosshair.
-3. Avoid a large global Ability Dashboard until core abilities are stable.
-
-## Existing prototype note
-
-Old classes such as:
-
-```text
-TobiRadialMenu.java
-KamuiTravelMenu.java
-```
-
-are prototypes and contain incorrect naming/responsibility from earlier work.
-
-Desired future refactor:
-
-```text
-AbilityRadialMenu.java          # optional quick selector
-KamuiNavigationScreen.java      # C wheel/self warp/waypoints
-ManualTeleportScreen.java       # X/Y/Z page
-WaypointEditorScreen.java       # naming/delete/edit operations
-KamuiTimerHud.java              # R ability timer below crosshair
-```
-
----
-
-# 17. Performance Rules Specific to New Kamui Features
+# 16. Performance Rules
 
 ## Good patterns
 
 ```text
-One local block check for head/entry state
-3-tick stable surface exit counter
-One nearby mob target-clear scan only when entering Underground Mode
+Virtual floor: one local block column scan for findSupportBelow
+One nearby mob target-clear scan only on activation
 One small forward entity query only when X is cast
 UUID lists for restrained/kidnapped targets
-Transfer/release queues batched by tick
+Transfer/release queues batched by tick (10 entities/tick)
 Pre-load destination chunk only when a transfer actually succeeds
+State payload sent only on activation/deactivation/floorY change
 ```
 
 ## Avoid
@@ -989,43 +803,35 @@ Sending HUD timer packets every tick
 Loading waypoint chunks just to display GUI
 Repeatedly re-adding attribute modifiers
 Global mob aggro reset outside the local relevant area
+Block collision shape queries every tick for every nearby block
 ```
-
-## Queue policy
-
-Unlimited target selection is allowed by design. Teleport/release must still batch work, for example:
-
-```text
-10 entities per tick
-```
-
-This protects TPS while preserving “capture everything in range” gameplay.
 
 ---
 
-# 18. Current Implementation Status
+# 17. Current Implementation Status
 
-## Working / tested core
-
-```text
-R toggle works
-60-second duration works
-5-second forced-expiry cooldown works
-1-second manual-off cooldown works
-Damage protection works
-3-tick attack vulnerability exists
-Shift terrain entry works
-Underground no-clip/flight works when mixin config is enabled
-Surface return can restore normal movement
-Mixin/Attachment architecture replaces stealable hidden effect
-```
-
-## Recently added / requires testing confirmation
+## Working — Combat Kamui Intangibility
 
 ```text
-Combat knockback cancellation
-Explosion affected-entity removal for Creeper/TNT knockback
-Crosshair 60-second timer HUD
+✅ R toggle on/off
+✅ 60-second duration
+✅ 5-second forced-expiry cooldown
+✅ 1-second manual-off cooldown
+✅ Damage protection (EntityInvulnerabilityCheckEvent)
+✅ 3-tick attack vulnerability on attack
+✅ Combat knockback cancellation (LivingKnockBackEvent)
+✅ Explosion affected-entity removal (ExplosionEvent.Detonate)
+✅ Projectile cancel + discard on impact
+✅ Crosshair timer HUD
+✅ Virtual floor system (noPhysics + gravity + floorY clamp)
+✅ No jitter (Pre-tick gravity suppression + Post-tick restore)
+✅ Jump raises floorY +1 (velocity detection + consumed flag)
+✅ Shift-hold sinks floorY -1 every 5 ticks
+✅ Auto-adjust floorY down to terrain (findSupportBelow)
+✅ No suffocation while Kamui active (EntityKamuiMixin → isInWall)
+✅ No creative flight — vanilla gravity + vanilla jump only
+✅ Mixin/Attachment architecture (no stealable potion effect)
+✅ Client-side prediction mirrors server virtual floor
 ```
 
 ## Not yet implemented
@@ -1033,9 +839,8 @@ Crosshair 60-second timer HUD
 ```text
 Custom Kamui dodge sound
 Kamui Absorption / Release
-Kamui Dimension JSON/world generation
 Self warp round trip
-C navigation GUI
+C navigation GUI (screens exist as prototypes)
 Waypoints
 Manual coordinate teleport
 Kamui Travel
@@ -1045,20 +850,17 @@ Full Black Receiver refinement
 
 ---
 
-# 19. Open Decisions Still Needed
+# 18. Open Decisions Still Needed
 
-1. ~~**C input behavior**~~ — **RESOLVED.** C opens the wheel only; never channels
-   directly. Selecting a wheel option starts that option's 3-second channel.
-   Center is a "Choose Coordinates" button that navigates to the manual screen.
-2. **Release destination outside Kamui Void:** Confirm all released mobs should appear at the caster's current location.
-3. **Line of sight for X absorption:** The current new design defines a forward range/cone but has not explicitly finalized whether blocks can block selection. Recommended: require line of sight.
-4. **Player capture:** Not included in current target plan; leave for future multiplayer-specific design.
-5. **Waypoint GUI visual layout:** Radial wheel is desired, but implementation can initially use clean vanilla buttons/list behavior if the wheel becomes hard to use with 10 long labels.
-6. **Custom Kamui sound:** Provide `.ogg` later; use built-in placeholder sound meanwhile.
+1. **Release destination outside Kamui Void:** Confirm all released mobs should appear at the caster's current location.
+2. **Line of sight for X absorption:** The current new design defines a forward range/cone but has not explicitly finalized whether blocks can block selection. Recommended: require line of sight.
+3. **Player capture:** Not included in current target plan; leave for future multiplayer-specific design.
+4. **Waypoint GUI visual layout:** Radial wheel is desired, but implementation can initially use clean vanilla buttons/list behavior if the wheel becomes hard to use with 10 long labels.
+5. **Custom Kamui sound:** Provide `.ogg` later; use built-in placeholder sound meanwhile.
 
 ---
 
-# 20. Definition of Done for an Ability
+# 19. Definition of Done for an Ability
 
 An ability is complete when:
 
@@ -1072,34 +874,3 @@ An ability is complete when:
 - large entity operations are batched;
 - no console errors occur;
 - the feature does not rely on a stealable potion effect unless intentionally designed as one.
-
----
-
----
-
-# 21. Session Handoff — C Navigation GUI (READ FIRST)
-
-## What happened
-
-The C navigation GUI (scope A: screens plus storage, no teleporting) was written
-in full, but the session that wrote it lost GitHub access before pushing, because
-its pull request had been merged. **None of this code has ever been compiled by
-CI.** The user has been pasting the files into a local copy at
-`Tobi-neoforge-1.21.1-main` and running Gradle by hand.
-
-Assume remaining compile errors. They have been ordinary wrong-API-name mistakes,
-each a one-line fix.
-
-## Compile errors already found and fixed
-
-Apply these if the code is ever re-pasted from an older copy.
-
-1. **Missing package.** `client/renderers/` did not exist. Create the folder and
-   add `TobiRenderTypes.java`.
-
-2. **`InputConstants.KEY_ENTER` does not exist.** In `WaypointEditorScreen.java`:
-   ```java
-   // wrong
-   if (keyCode == InputConstants.KEY_ENTER || keyCode == InputConstants.KEY_KP_ENTER) {
-   // correct
-   if (keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER) {
