@@ -181,6 +181,8 @@ public final class KamuiIntangibilityHandler {
 
         // Record Y velocity before we potentially zero it,
         // so Post-tick can detect if a jump was initiated.
+        // A value > 0 means the player is already rising (previous jump),
+        // ≤ 0 means on ground or falling.
         PRE_TRAVEL_Y_VEL.put(player.getUUID(), yVel);
 
         // If at or below floorY and not rising → stand on virtual floor
