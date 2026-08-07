@@ -11,14 +11,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Enforces Kamui virtual-floor physics at the living-entity tick level.
+ * Enforces Kamui physics at the living-entity tick level.
  *
- * <p>When Kamui is active:
- * <ul>
- *   <li>Sets {@code noPhysics = true} and resets fall distance every tick.</li>
- *   <li>Forces {@code onGround = true} when on the virtual floor, so
- *       vanilla's jump check in aiStep() fires and the player can jump.</li>
- * </ul>
+ * <p>When Kamui is active: sets noPhysics = true and resets fall distance.
  */
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityKamuiMixin {
@@ -44,20 +39,5 @@ public abstract class LivingEntityKamuiMixin {
 
         player.noPhysics = true;
         player.resetFallDistance();
-
-        // Force onGround=true when on the virtual floor.
-        // This runs after Entity.tick() (which may reset onGround)
-        // but before aiStep() (which checks onGround for jump).
-        if (!player.level().isClientSide()) {
-            KamuiIntangibilityState state = player.getExistingDataOrNull(TobiMod.KAMUI_INTANGIBILITY_STATE);
-            if (state != null) {
-                double floorY = state.floorY();
-                double yVel = player.getDeltaMovement().y;
-                boolean nearFloor = Math.abs(player.getY() - floorY) < 0.1;
-                if (nearFloor && yVel <= 0.0) {
-                    player.setOnGround(true);
-                }
-            }
-        }
     }
 }

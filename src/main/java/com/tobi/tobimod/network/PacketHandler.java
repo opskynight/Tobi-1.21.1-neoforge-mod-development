@@ -5,6 +5,7 @@ import com.tobi.tobimod.common.abilities.KamuiIntangibilityHandler;
 import com.tobi.tobimod.network.payload.KamuiIntangibilityStatePayload;
 import com.tobi.tobimod.network.payload.KamuiIntangibilityTogglePayload;
 import com.tobi.tobimod.network.payload.KamuiJumpPayload;
+import com.tobi.tobimod.network.payload.KamuiVerticalMovePayload;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -47,6 +48,12 @@ public final class PacketHandler {
                 KamuiJumpPayload.TYPE,
                 KamuiJumpPayload.STREAM_CODEC,
                 KamuiIntangibilityHandler::handleJumpPayload
+        );
+
+        registrar.playToServer(
+                KamuiVerticalMovePayload.TYPE,
+                KamuiVerticalMovePayload.STREAM_CODEC,
+                KamuiIntangibilityHandler::handleVerticalMovePayload
         );
 
         registrar.playToServer(

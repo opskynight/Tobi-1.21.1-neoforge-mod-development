@@ -12,19 +12,20 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 /**
  * Compact server-to-client Kamui state snapshot.
  *
- * <p>Carries the virtual floor Y level so the client can do accurate
- * prediction (clamping Y, setting onGround, etc.) without waiting for
- * server corrections.
+ * <p>Carries the virtual floor Y level and underground mode flag
+ * so the client can do accurate prediction.
  */
 public record KamuiIntangibilityStatePayload(
         boolean active,
         double floorY,
-        int remainingSeconds
+        int remainingSeconds,
+        boolean underground
 ) implements CustomPacketPayload {
     private static boolean clientKamuiActive;
     private static double clientFloorY;
     private static int clientRemainingSeconds;
     private static int clientTimerTicks;
+    private static boolean clientUnderground;
 
     public static final Type<KamuiIntangibilityStatePayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(TobiMod.MOD_ID, "kamui_intangibility_state"));
@@ -37,6 +38,8 @@ public record KamuiIntangibilityStatePayload(
                     KamuiIntangibilityStatePayload::floorY,
                     ByteBufCodecs.INT,
                     KamuiIntangibilityStatePayload::remainingSeconds,
+                    ByteBufCodecs.BOOL,
+                    KamuiIntangibilityStatePayload::underground,
                     KamuiIntangibilityStatePayload::new
             );
 
@@ -45,24 +48,27 @@ public record KamuiIntangibilityStatePayload(
         return TYPE;
     }
 
-    /** Returns true if Kamui is active on the client side. */
     public static boolean isClientKamuiActive() {
         return clientKamuiActive;
     }
 
-    /** Returns the server-synced virtual floor Y level (client side). */
     public static double getClientFloorY() {
         return clientFloorY;
     }
 
-    /**
-     * Predicts a floor raise by 1 block on the client side.
-     * Called when the client detects a jump and sends a KamuiJumpPacket,
-     * so the floor moves up immediately without waiting for server round-trip.
-     */
+    public static boolean isClientUnderground() {
+        return clientUnderground;
+    }
+
     public static void predictFloorRaise() {
         if (clientKamuiActive) {
             clientFloorY += 1.0;
+        }
+    }
+
+    public static void predictFloorSet(double newFloorY) {
+        if (clientKamuiActive) {
+            clientFloorY = newFloorY;
         }
     }
 
@@ -74,7 +80,6 @@ public record KamuiIntangibilityStatePayload(
         return clientRemainingSeconds;
     }
 
-    /** Called by the client tick handler. The visual count changes only every second. */
     public static void tickClientTimer() {
         if (!clientKamuiActive || clientRemainingSeconds <= 0) {
             return;
@@ -87,26 +92,16 @@ public record KamuiIntangibilityStatePayload(
         }
     }
 
-    /**
-     * Predicts floorY being set to an exact value (for Phase Ascend).
-     * Called when the client detects a surface escape jump.
-     */
-    public static void predictFloorSet(double newFloorY) {
-        if (clientKamuiActive) {
-            clientFloorY = newFloorY;
-        }
-    }
-
     public static void handle(KamuiIntangibilityStatePayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             clientKamuiActive = payload.active();
             clientFloorY = payload.active() ? payload.floorY() : 0.0;
+            clientUnderground = payload.active() && payload.underground();
             clientRemainingSeconds = payload.active() ? Math.max(0, payload.remainingSeconds()) : 0;
             clientTimerTicks = 0;
 
             Player player = context.player();
             if (player != null && !payload.active() && !player.isSpectator()) {
-                // Kamui just deactivated — restore vanilla physics
                 player.noPhysics = false;
                 player.setNoGravity(false);
             }
