@@ -1,0 +1,10 @@
+{
+  "type": "tobimod:kamui_void",
+  "generator": {
+    "type": "tobimod:kamui",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "minecraft:the_void"
+    }
+  }
+}
