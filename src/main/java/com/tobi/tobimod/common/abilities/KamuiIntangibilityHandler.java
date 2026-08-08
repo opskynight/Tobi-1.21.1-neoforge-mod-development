@@ -30,6 +30,8 @@ import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundSource;
+import com.tobi.tobimod.common.sound.ModSoundEvents;
 import net.neoforged.neoforge.event.entity.living.LivingKnockBackEvent;
 import net.neoforged.neoforge.event.level.ExplosionEvent;
 
@@ -85,6 +87,9 @@ public final class KamuiIntangibilityHandler {
     private static final Map<UUID, Double> LAST_SYNCED_FLOOR_Y = new HashMap<>();
     /** Previous underground state — for mode transition detection. */
     private static final Map<UUID, Boolean> PREV_UNDERGROUND = new HashMap<>();
+    /** Phased dodge sound throttle — fixed 1-second bucket, 3 sounds/sec per player */
+    private static final Map<UUID, Long> LAST_PHASED_SECOND = new HashMap<>();
+    private static final Map<UUID, Integer> PHASED_COUNT_IN_SECOND = new HashMap<>();
 
     private KamuiIntangibilityHandler() {}
 
@@ -241,6 +246,7 @@ public final class KamuiIntangibilityHandler {
         UNDERGROUND_JUMP_HELD.remove(uuid);
         LAST_SYNCED_FLOOR_Y.remove(uuid);
         PREV_UNDERGROUND.remove(uuid);
+        // keep phased throttle maps — don't clear on deactivate, they are per-second buckets
 
         // Restore normal pose
         player.setPose(Pose.STANDING);
@@ -611,6 +617,25 @@ public final class KamuiIntangibilityHandler {
         }
     }
 
+    /** Plays phased dodge sound — fixed 1-sec bucket, max 3/sec per player, broadcast to all nearby */
+    private static void tryPlayPhasedSound(ServerPlayer player) {
+        UUID uuid = player.getUUID();
+        long gameTime = player.level().getGameTime();
+        long sec = gameTime / 20L; // fixed second bucket (0-19 ticks = sec0, 20-39 = sec1, etc.)
+        Long lastSec = LAST_PHASED_SECOND.get(uuid);
+        int count = PHASED_COUNT_IN_SECOND.getOrDefault(uuid, 0);
+        if (lastSec == null || lastSec.longValue() != sec) {
+            lastSec = sec;
+            count = 0;
+        }
+        if (count >= 3) return; // cap reached in this second — silent but still blocked
+        LAST_PHASED_SECOND.put(uuid, sec);
+        PHASED_COUNT_IN_SECOND.put(uuid, count + 1);
+        // broadcast to all nearby — ONE event `kamui_phased` randomly picks phased1 or phased2
+        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                ModSoundEvents.KAMUI_PHASED.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
+    }
+
     /** Always sends state (for activation, deactivation, Phase Ascend). */
     private static void forceSyncState(ServerPlayer player, KamuiIntangibilityState state) {
         boolean underground = isBodyInsideSolid(player);
@@ -639,7 +664,11 @@ public final class KamuiIntangibilityHandler {
     public static void onInvulnerabilityCheck(EntityInvulnerabilityCheckEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         KamuiIntangibilityState state = player.getData(TobiMod.KAMUI_INTANGIBILITY_STATE);
-        if (state.isProtected(player.level().getGameTime())) event.setInvulnerable(true);
+        if (state.isProtected(player.level().getGameTime())) {
+            event.setInvulnerable(true);
+            // ALL blocked hits while protected → phased dodge (broadcast, 3/sec fixed bucket, random phased1/phased2)
+            tryPlayPhasedSound(player);
+        }
     }
 
     // ── Fallback shield for #2 (bypass_invulnerability damage) + #3 (mod overrides isInvulnerableTo) ──
@@ -650,6 +679,8 @@ public final class KamuiIntangibilityHandler {
         KamuiIntangibilityState state = player.getData(TobiMod.KAMUI_INTANGIBILITY_STATE);
         if (state.isProtected(player.level().getGameTime())) {
             event.setCanceled(true);
+            // Fallback also plays sound (mutually exclusive with invulnerabilityCheck — only one fires per hit)
+            tryPlayPhasedSound(player);
         }
     }
 
@@ -661,6 +692,7 @@ public final class KamuiIntangibilityHandler {
         if (state.isProtected(player.level().getGameTime())) {
             event.setCanceled(true);
             event.getProjectile().discard();
+            tryPlayPhasedSound(player);
         }
     }
 
@@ -677,6 +709,10 @@ public final class KamuiIntangibilityHandler {
         if (event.getEntity() instanceof ServerPlayer player) {
             KamuiIntangibilityState state = player.getData(TobiMod.KAMUI_INTANGIBILITY_STATE);
             deactivate(player, state, player.level().getGameTime(), true);
+            // cleanup phased sound throttle
+            UUID uuid = player.getUUID();
+            LAST_PHASED_SECOND.remove(uuid);
+            PHASED_COUNT_IN_SECOND.remove(uuid);
         }
     }
 
@@ -702,5 +738,9 @@ public final class KamuiIntangibilityHandler {
         player.getData(TobiMod.KAMUI_INTANGIBILITY_STATE).clearAfterDeath();
         player.noPhysics = player.isSpectator();
         if (!player.isSpectator()) player.setNoGravity(false);
+        // also clear phased throttle on death/clone to avoid carry-over second bucket
+        UUID uuid = player.getUUID();
+        LAST_PHASED_SECOND.remove(uuid);
+        PHASED_COUNT_IN_SECOND.remove(uuid);
     }
 }

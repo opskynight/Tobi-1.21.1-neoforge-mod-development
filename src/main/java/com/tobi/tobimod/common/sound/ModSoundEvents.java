@@ -28,5 +28,13 @@ public final class ModSoundEvents {
             )
     );
 
+    /** Phased dodge sound — ONE event randomly picks phased1 or phased2 (all blocked hits while intangible). */
+    public static final Supplier<SoundEvent> KAMUI_PHASED = SOUND_EVENTS.register(
+            "kamui_phased",
+            () -> SoundEvent.createVariableRangeEvent(
+                    ResourceLocation.fromNamespaceAndPath(TobiMod.MOD_ID, "kamui_phased")
+            )
+    );
+
     private ModSoundEvents() {}
 }

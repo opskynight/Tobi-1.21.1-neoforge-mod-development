@@ -34,6 +34,7 @@
   "screen.tobimod.cancel": "Cancel",
 
   "sound.tobimod.kamui_channel": "Kamui channeling",
+  "sound.tobimod.kamui_phased": "Kamui phased",
 
   "message.tobimod.kamui_channel_start": "§5Kamui \u2014 Channeling... 3s",
   "message.tobimod.kamui_channel_progress": "§5Kamui \u2014 Channeling... %ds",
