@@ -17,11 +17,13 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.common.NeoForgeMod;
 import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
 import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
+import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
@@ -93,9 +95,31 @@ public final class KamuiIntangibilityHandler {
     public static void handleTogglePayload(KamuiIntangibilityTogglePayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer player) {
+                // If channeling, R cancels channel and force-enables intangibility (bypass cooldown) + stops sound
+                if (KamuiChannelHandler.isChanneling(player)) {
+                    KamuiChannelHandler.cancelChannelAndActivateKamui(player);
+                    return;
+                }
                 toggle(player);
             }
         });
+    }
+
+    /**
+     * Force-activates Kamui intangibility bypassing cooldown — used when R cancels a travel channel.
+     * If already active, does nothing. Otherwise activates immediately.
+     */
+    public static void forceActivate(ServerPlayer player) {
+        long now = player.level().getGameTime();
+        KamuiIntangibilityState state = player.getData(TobiMod.KAMUI_INTANGIBILITY_STATE);
+        if (state.isActive()) return;
+        // Bypass isOnCooldown check — activate regardless
+        state.activate(player, now);
+        double supportedFloor = findSupportBelow(player, state.floorY());
+        state.floorY(supportedFloor);
+        applyKamuiMode(player);
+        clearNearbyMobAggro(player);
+        forceSyncState(player, state);
     }
 
     public static void handleJumpPayload(KamuiJumpPayload payload, IPayloadContext context) {
@@ -616,6 +640,17 @@ public final class KamuiIntangibilityHandler {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         KamuiIntangibilityState state = player.getData(TobiMod.KAMUI_INTANGIBILITY_STATE);
         if (state.isProtected(player.level().getGameTime())) event.setInvulnerable(true);
+    }
+
+    // ── Fallback shield for #2 (bypass_invulnerability damage) + #3 (mod overrides isInvulnerableTo) ──
+    // Very cheap: only fires when something actually tries to hurt you (not every tick)
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void onLivingIncomingDamage(LivingIncomingDamageEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        KamuiIntangibilityState state = player.getData(TobiMod.KAMUI_INTANGIBILITY_STATE);
+        if (state.isProtected(player.level().getGameTime())) {
+            event.setCanceled(true);
+        }
     }
 
     @SubscribeEvent

@@ -1,6 +1,7 @@
 package com.tobi.tobimod.client.screens;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.tobi.tobimod.client.ClientEventHandler;
 import com.tobi.tobimod.client.keybinds.ModKeybindings;
 import com.tobi.tobimod.network.payload.ManualTeleportPayload;
 import net.minecraft.client.Minecraft;
@@ -133,14 +134,16 @@ public class ManualTeleportScreen extends Screen {
         super.render(guiGraphics, mouseX, mouseY, partialTicks);
     }
 
-    /** Reads the three coordinate fields and sends a server teleport request. */
+    /** Reads the three coordinate fields, starts channel sound/GUI close, and sends server request. */
     private void doTeleport() {
         try {
             double x = Double.parseDouble(this.xField.getValue());
             double y = Double.parseDouble(this.yField.getValue());
             double z = Double.parseDouble(this.zField.getValue());
+            ClientEventHandler.beginChannel();
             PacketDistributor.sendToServer(new ManualTeleportPayload(x, y, z));
-            onClose();
+            // Spec: after pressing travel, gui closes to normal view
+            Minecraft.getInstance().setScreen(null);
         } catch (NumberFormatException ignored) {
             // Fields are validated as the user types, so this should never fire.
         }
