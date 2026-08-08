@@ -58,7 +58,7 @@ public class KamuiNavigationScreen extends Screen {
     private int timeIn;
     private int slotHovered = -1;
     private int slotSelected = -1;
-    private static boolean staysOpen;
+    private static boolean staysOpen = true; // YES by default
 
     private ExtendedButton renameButton;
     private ExtendedButton deleteButton;
@@ -112,6 +112,7 @@ public class KamuiNavigationScreen extends Screen {
         ));
 
         // Side button: context-sensitive Enter Kamui / Return to Origin.
+        // After press: close GUI to normal view and start 3s channel (sound+lock). Server validates and teleports after 60 ticks.
         ExtendedButton selfKamuiButton = new ExtendedButton(
                 centerX - RADIUS_MAX - 110,
                 centerY - 34,
@@ -120,6 +121,7 @@ public class KamuiNavigationScreen extends Screen {
                 selfKamuiLabel(),
                 button -> {
                     if (isInsideKamuiVoid()) {
+                        ClientEventHandler.beginChannel();
                         PacketDistributor.sendToServer(
                                 new WaypointActionPayload(
                                         WaypointActionPayload.Action.LEAVE_KAMUI,
@@ -128,10 +130,7 @@ public class KamuiNavigationScreen extends Screen {
                                 )
                         );
                     } else {
-                        // Start the client-side three-second channel sound/timer.
-                        ClientEventHandler.beginEnterChannel();
-
-                        // The server waits 60 ticks before teleporting.
+                        ClientEventHandler.beginChannel();
                         PacketDistributor.sendToServer(
                                 new WaypointActionPayload(
                                         WaypointActionPayload.Action.ENTER_KAMUI,
@@ -140,6 +139,8 @@ public class KamuiNavigationScreen extends Screen {
                                 )
                         );
                     }
+                    // Close wheel — return to normal view (spec: gui closes itself)
+                    Minecraft.getInstance().setScreen(null);
                 }
         );
 
@@ -154,6 +155,7 @@ public class KamuiNavigationScreen extends Screen {
                 Component.translatable("screen.tobimod.travel_to_waypoint"),
                 button -> {
                     if (KamuiWaypoints.isValidSlot(slotSelected)) {
+                        ClientEventHandler.beginChannel();
                         PacketDistributor.sendToServer(
                                 new WaypointActionPayload(
                                         WaypointActionPayload.Action.TRAVEL,
@@ -161,6 +163,7 @@ public class KamuiNavigationScreen extends Screen {
                                         ""
                                 )
                         );
+                        Minecraft.getInstance().setScreen(null);
                     }
                 }
         );
@@ -242,7 +245,7 @@ public class KamuiNavigationScreen extends Screen {
             deleteButton.active = filled;
         }
         if (teleportButton != null) {
-teleportButton.active = filled;
+            teleportButton.active = filled;
         }
     }
 

@@ -3,6 +3,9 @@ package com.tobi.tobimod.client;
 import com.tobi.tobimod.TobiMod;
 import com.tobi.tobimod.client.keybinds.ModKeybindings;
 import com.tobi.tobimod.client.screens.KamuiNavigationScreen;
+import com.tobi.tobimod.client.sound.KamuiSoundManager;
+import com.tobi.tobimod.network.payload.KamuiChannelCancelPayload;
+import com.tobi.tobimod.network.payload.KamuiChannelSyncPayload;
 import com.tobi.tobimod.network.payload.KamuiIntangibilityStatePayload;
 import com.tobi.tobimod.network.payload.KamuiIntangibilityTogglePayload;
 import com.tobi.tobimod.network.payload.KamuiJumpPayload;
@@ -19,13 +22,15 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Client-side Kamui enforcement with dual-mode support.
+ * Client-side Kamui enforcement with dual-mode support + channel handling.
  *
  * <h3>Underground mode</h3>
  * <ul>
@@ -41,6 +46,15 @@ import org.slf4j.LoggerFactory;
  *   <li>Hold jump → Step-Up (+1 every 4 ticks, solid check)</li>
  *   <li>Look up + tap jump inside wall → Phase Ascend</li>
  * </ul>
+ *
+ * <h3>Channel mode (travel)</h3>
+ * <ul>
+ *   <li>3-second channel (60 ticks) for ALL travel: enter/leave/waypoint/manual</li>
+ *   <li>Plays kamui_channel.ogg (3s, non-looping, relative, no attenuation)</li>
+ *   <li>If interrupted (damage, movement, R) → sound stops + channel cancels</li>
+ *   <li>While channeling: attack/block/item use blocked; any movement cancels</li>
+ *   <li>R while channeling → cancel channel + force-activate intangibility (bypasses cooldown)</li>
+ * </ul>
  */
 @EventBusSubscriber(modid = TobiMod.MOD_ID, value = Dist.CLIENT)
 public final class ClientEventHandler {
@@ -50,6 +64,12 @@ public final class ClientEventHandler {
     private static final float LOOK_UP_PITCH = -45.0F;
     private static final double SMOOTH_SPEED = 0.15D;
     private static final int CLIENT_SCAN_DEPTH = 128;
+
+    // ── Channel state (client) ──
+    private static boolean channelActive = false;
+    private static int channelTicksRemaining = 0;
+    private static double channelStartX, channelStartY, channelStartZ;
+    private static final double CHANNEL_MOVEMENT_CANCEL_SQR = 0.09; // 0.3 blocks
 
     // ── Underground state ──
     private static boolean undergroundJumpHeld = false;
@@ -63,7 +83,48 @@ public final class ClientEventHandler {
 
     private ClientEventHandler() {}
 
-    public static void beginEnterChannel() {}
+    // ──────────────────────────────────────────────
+    //  Channel public API
+    // ──────────────────────────────────────────────
+
+    /** Starts the 3s channel locally (plays sound, sets freeze state). Idempotent. */
+    public static void beginChannel() {
+        if (channelActive) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+        channelActive = true;
+        channelTicksRemaining = 60;
+        channelStartX = mc.player.getX();
+        channelStartY = mc.player.getY();
+        channelStartZ = mc.player.getZ();
+        KamuiSoundManager.startChannel();
+    }
+
+    /** Legacy alias — start enter channel (called from older screen code). */
+    public static void beginEnterChannel() {
+        beginChannel();
+    }
+
+    /** Cancels channel locally (stops sound). Idempotent. */
+    public static void cancelChannel() {
+        if (!channelActive) return;
+        channelActive = false;
+        channelTicksRemaining = 0;
+        KamuiSoundManager.stop();
+    }
+
+    /** Server -> client sync handler */
+    public static void handleChannelSync(KamuiChannelSyncPayload payload) {
+        if (payload.action() == KamuiChannelSyncPayload.Action.START) {
+            beginChannel();
+        } else {
+            cancelChannel();
+        }
+    }
+
+    public static boolean isChanneling() {
+        return channelActive;
+    }
 
     public static void resetJumpTracking() {
         undergroundJumpHeld = false;
@@ -96,10 +157,98 @@ public final class ClientEventHandler {
         return minecraft.options.keyShift.isDown();
     }
 
+    private static boolean isMovementKeyHeld(Minecraft mc) {
+        long window = mc.getWindow().getWindow();
+        // Check W/A/S/D physical
+        boolean w = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_W) == GLFW.GLFW_PRESS;
+        boolean a = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_A) == GLFW.GLFW_PRESS;
+        boolean s = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_S) == GLFW.GLFW_PRESS;
+        boolean d = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_D) == GLFW.GLFW_PRESS;
+        boolean jump = isJumpKeyPhysicallyHeld(mc);
+        boolean shift = isShiftKeyPhysicallyHeld(mc);
+        boolean sprint = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS
+                || GLFW.glfwGetKey(window, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS;
+        return w || a || s || d || jump || shift || sprint;
+    }
+
+    @SubscribeEvent
+    public static void onInteractionKeyMappingTriggered(InputEvent.InteractionKeyMappingTriggered event) {
+        if (!channelActive) return;
+        // While channeling: block ALL attack/use interactions. Movement keys are NOT blocked here — they will cancel instead.
+        if (event.isAttack() || event.isUseItem() || event.isPickBlock()) {
+            event.setCanceled(true);
+            event.setSwingHand(false);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onScreenOpening(ScreenEvent.Opening event) {
+        if (!channelActive) return;
+        // While channeling you can't do anything — block inventory/container opening.
+        // Allow chat screen and our own screens to close, but block inventory.
+        if (event.getNewScreen() instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen) {
+            event.setCanceled(true);
+        } else if (event.getNewScreen() instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen) {
+            event.setCanceled(true);
+        }
+    }
+
     @SubscribeEvent
     public static void onClientTickPre(ClientTickEvent.Pre event) {
         Minecraft minecraft = Minecraft.getInstance();
         KamuiIntangibilityStatePayload.tickClientTimer();
+
+        // ── Channel tick (always, even if intangibility inactive) ──
+        if (channelActive && minecraft.player != null) {
+            // Death also cancels channel (and stops sound)
+            if (minecraft.player.isDeadOrDying()) {
+                cancelChannel();
+                PacketDistributor.sendToServer(new KamuiChannelCancelPayload());
+            } else {
+                // If player moved beyond threshold -> cancel and notify server
+                double dx = minecraft.player.getX() - channelStartX;
+                double dy = minecraft.player.getY() - channelStartY;
+                double dz = minecraft.player.getZ() - channelStartZ;
+                double distSqr = dx * dx + dy * dy + dz * dz;
+                boolean moved = distSqr > CHANNEL_MOVEMENT_CANCEL_SQR;
+
+                // Also detect intentional movement key held (more responsive than position, handles freeze attempts)
+                // But don't cancel on tiny camera only — need actual key
+                // We treat any WASD/jump/shift/sprint as movement intent
+                // However, jump/shift already used for intangibility underground; but while channeling intangibility is OFF, so jump/shift = movement
+                if (!moved && isMovementKeyHeld(minecraft) && minecraft.screen == null) {
+                    // If they are actively holding movement, consider it movement even if position hasn't updated yet this tick
+                    // Only cancel if they have been holding for > 1 tick? For instant feedback, cancel immediately.
+                    // To avoid accidental micro-taps, we still require position OR key? We'll require key + small delay? For now immediate.
+                    // But to avoid cancel on the same tick channel started (where player might already hold W), give 2-tick grace
+                    if (channelTicksRemaining < 58) {
+                        moved = true;
+                    }
+                }
+
+                if (moved) {
+                    // Movement interrupts channel
+                    cancelChannel();
+                    PacketDistributor.sendToServer(new KamuiChannelCancelPayload());
+                    // Don't return — still handle keybinds below but channel is now cancelled
+                } else {
+                    // Tick down channel timer
+                    channelTicksRemaining--;
+                    if (channelTicksRemaining <= 0) {
+                        // Channel finished naturally — sound already ended (non-looping 3s) but clear ref so next channel plays every time
+                        KamuiSoundManager.stop();
+                        channelActive = false;
+                        channelTicksRemaining = 0;
+                    } else {
+                        // While channeling and not moved: freeze is achieved via blocking attack/use above.
+                        // We don't forcibly reset position here — we let movement be detected above. If they don't move, they stay.
+                        // Optionally clamp delta to zero to prevent drift, but not needed.
+                    }
+                }
+            } // close dead-else
+        } else if (channelActive && minecraft.player == null) {
+            cancelChannel();
+        }
 
         if (minecraft.player != null && KamuiIntangibilityStatePayload.isClientKamuiActive()) {
             Player player = minecraft.player;
@@ -127,12 +276,31 @@ public final class ClientEventHandler {
 
         // ── Keybinds ──
         while (ModKeybindings.KAMUI_INTANGIBILITY.consumeClick()) {
-            if (minecraft.player != null && minecraft.screen == null) {
+            if (minecraft.player == null) continue;
+            // If channeling, R should cancel channel and turn on intangibility.
+            // We handle sound stop immediately for responsiveness, then let server do force-activate.
+            if (channelActive) {
+                cancelChannel(); // stop sound locally immediately
+                // Still send toggle so server does cancel+forceActivate
+                PacketDistributor.sendToServer(new KamuiIntangibilityTogglePayload());
+                // Keep GUI closed if somehow open
+                if (minecraft.screen != null) {
+                    minecraft.setScreen(null);
+                }
+                continue;
+            }
+            if (minecraft.screen == null) {
                 PacketDistributor.sendToServer(new KamuiIntangibilityTogglePayload());
             }
         }
         while (ModKeybindings.KAMUI_NAVIGATION.consumeClick()) {
-            if (minecraft.player != null && minecraft.screen == null) {
+            if (minecraft.player == null) continue;
+            // While channeling, block navigation wheel open (you can't do anything)
+            if (channelActive) {
+                // optionally cancel? spec says only R cancels, so just block
+                continue;
+            }
+            if (minecraft.screen == null) {
                 minecraft.setScreen(new KamuiNavigationScreen());
             }
         }
