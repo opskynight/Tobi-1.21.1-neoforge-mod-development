@@ -18,6 +18,8 @@
   "screen.tobimod.choose_coordinates": "Choose Coordinates",
   "screen.tobimod.enter_kamui": "Enter Kamui",
   "screen.tobimod.return_to_origin": "Return to Origin",
+  "screen.tobimod.enter_scout": "Kamui Scout",
+  "screen.tobimod.exit_scout": "Exit Scout",
   "screen.tobimod.travel_to_waypoint": "Travel to Waypoint",
   "screen.tobimod.rename_waypoint": "Rename Waypoint",
   "screen.tobimod.delete_waypoint": "Delete Waypoint",
@@ -37,5 +39,9 @@
 
   "message.tobimod.kamui_channel_start": "§5Kamui \u2014 Channeling... 3s",
   "message.tobimod.kamui_channel_progress": "§5Kamui \u2014 Channeling... %ds",
-  "message.tobimod.kamui_channel_interrupted": "§cKamui channel interrupted!"
+  "message.tobimod.kamui_channel_interrupted": "§cKamui channel interrupted!",
+  "message.tobimod.kamui_scout_enter": "§5Kamui Scout — Activated",
+  "message.tobimod.kamui_scout_exit": "§7Kamui Scout — Deactivated",
+  "message.tobimod.kamui_scout_speed": "§7Scout speed: %s",
+  "message.tobimod.kamui_scout_speed_reset": "§7Scout speed reset"
 }

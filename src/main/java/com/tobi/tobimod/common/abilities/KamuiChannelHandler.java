@@ -31,7 +31,7 @@ public final class KamuiChannelHandler {
     private static final double MOVEMENT_CANCEL_SQR = 0.09; // 0.3 blocks
     private static final Map<UUID, ChannelData> ACTIVE_CHANNELS = new HashMap<>();
     private KamuiChannelHandler() {}
-    public enum Action { ENTER_KAMUI, LEAVE_KAMUI, TRAVEL_TO_WAYPOINT, TRAVEL_TO_COORDS }
+    public enum Action { ENTER_KAMUI, LEAVE_KAMUI, TRAVEL_TO_WAYPOINT, TRAVEL_TO_COORDS, SCOUT_ENTER, SCOUT_EXIT }
     private record ChannelData(Action action,int waypointSlot,double x,double y,double z,long startTime,double startX,double startY,double startZ){
         boolean isComplete(long now){return now-startTime>=CHANNEL_TICKS;}
         int remainingTicks(long now){return (int)(CHANNEL_TICKS-(now-startTime));}
@@ -64,10 +64,39 @@ public final class KamuiChannelHandler {
         player.displayClientMessage(Component.translatable("message.tobimod.kamui_channel_start"),true);
         PacketDistributor.sendToPlayer(player,new KamuiChannelSyncPayload(KamuiChannelSyncPayload.Action.START));
     }
+    public static void startScoutEnterChannel(ServerPlayer player){
+        long now=player.level().getGameTime();
+        // If already scouting, ignore
+        KamuiScoutState scout = player.getData(TobiMod.KAMUI_SCOUT_STATE);
+        if (scout.isActive()) return;
+        if (scout.isOnCooldown(now)) return;
+        if (isChanneling(player)) return;
+        deactivateKamui(player);
+        // also ensure scout not active
+        ChannelData d=new ChannelData(Action.SCOUT_ENTER,-1,0,0,0,now,player.getX(),player.getY(),player.getZ());
+        ACTIVE_CHANNELS.put(player.getUUID(),d);
+        player.displayClientMessage(Component.translatable("message.tobimod.kamui_channel_start"),true);
+        PacketDistributor.sendToPlayer(player,new KamuiChannelSyncPayload(KamuiChannelSyncPayload.Action.START));
+    }
+    public static void startScoutExitChannel(ServerPlayer player){
+        long now=player.level().getGameTime();
+        KamuiScoutState scout = player.getData(TobiMod.KAMUI_SCOUT_STATE);
+        if (!scout.isActive()) return;
+        if (isChanneling(player)) return;
+        // entering scout exit channel does NOT deactivate kamui (kamui already off)
+        ChannelData d=new ChannelData(Action.SCOUT_EXIT,-1,0,0,0,now,player.getX(),player.getY(),player.getZ());
+        ACTIVE_CHANNELS.put(player.getUUID(),d);
+        player.displayClientMessage(Component.translatable("message.tobimod.kamui_channel_start"),true);
+        PacketDistributor.sendToPlayer(player,new KamuiChannelSyncPayload(KamuiChannelSyncPayload.Action.START));
+    }
     public static boolean isChanneling(Player player){return ACTIVE_CHANNELS.containsKey(player.getUUID());}
     private static void deactivateKamui(ServerPlayer player){
         KamuiIntangibilityState s=player.getData(TobiMod.KAMUI_INTANGIBILITY_STATE);
         if(s.isActive()) KamuiIntangibilityHandler.deactivate(player,s,player.level().getGameTime(),true);
+        // also ensure scout deactivated if someone tries to start another channel while scouting? No, scout exit should be via scout channel, not travel.
+        // But if player starts travel while scouting, we should deactivate scout first
+        KamuiScoutState sc = player.getData(TobiMod.KAMUI_SCOUT_STATE);
+        if(sc.isActive()) KamuiScoutHandler.deactivate(player, sc, player.level().getGameTime(), true);
     }
     private static void cancelChannel(ServerPlayer player,Component r){
         if(ACTIVE_CHANNELS.remove(player.getUUID())!=null){
@@ -94,6 +123,8 @@ public final class KamuiChannelHandler {
             case LEAVE_KAMUI -> KamuiTravel.leave(player);
             case TRAVEL_TO_WAYPOINT -> KamuiTravel.travelToWaypoint(player,d.waypointSlot);
             case TRAVEL_TO_COORDS -> KamuiTravel.travelToCoords(player,d.x,d.y,d.z);
+            case SCOUT_ENTER -> KamuiScoutHandler.tryActivate(player);
+            case SCOUT_EXIT -> KamuiScoutHandler.tryDeactivate(player, true);
         }
     }
     @SubscribeEvent public static void onPlayerTick(PlayerTickEvent.Post e){

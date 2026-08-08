@@ -15,6 +15,8 @@ import com.tobi.tobimod.client.keybinds.ModKeybindings;
 import com.tobi.tobimod.client.renderers.TobiRenderTypes;
 import com.tobi.tobimod.common.waypoints.KamuiWaypoint;
 import com.tobi.tobimod.common.waypoints.KamuiWaypoints;
+import com.tobi.tobimod.network.payload.KamuiScoutActionPayload;
+import com.tobi.tobimod.network.payload.KamuiScoutStatePayload;
 import com.tobi.tobimod.network.payload.WaypointActionPayload;
 import com.tobi.tobimod.network.payload.WaypointSyncPayload;
 import net.minecraft.client.Minecraft;
@@ -146,6 +148,29 @@ public class KamuiNavigationScreen extends Screen {
 
         selfKamuiButton.active = true;
         addRenderableWidget(selfKamuiButton);
+
+        // Kamui Scout button: channel to enter/exit spectator-like noclip flight
+        boolean scoutActive = KamuiScoutStatePayload.isClientActive();
+        ExtendedButton scoutButton = new ExtendedButton(
+                centerX - RADIUS_MAX - 110,
+                centerY + 14,
+                104,
+                18,
+                scoutActive ? Component.translatable("screen.tobimod.exit_scout") : Component.translatable("screen.tobimod.enter_scout"),
+                button -> {
+                    // Scout enter/exit both use 3s channel per user choice
+                    ClientEventHandler.beginChannel();
+                    KamuiScoutActionPayload.Action act = KamuiScoutStatePayload.isClientActive()
+                            ? KamuiScoutActionPayload.Action.EXIT
+                            : KamuiScoutActionPayload.Action.ENTER;
+                    PacketDistributor.sendToServer(new KamuiScoutActionPayload(act));
+                    Minecraft.getInstance().setScreen(null);
+                }
+        );
+        // Disable if channel already active? Allow but will be cancelled server side.
+        // While scouting, still allow exit; while not scouting, allow enter even if in Kamui void? Scout works anywhere.
+        scoutButton.active = true;
+        addRenderableWidget(scoutButton);
 
         teleportButton = new ExtendedButton(
                 centerX - RADIUS_MAX - 110,

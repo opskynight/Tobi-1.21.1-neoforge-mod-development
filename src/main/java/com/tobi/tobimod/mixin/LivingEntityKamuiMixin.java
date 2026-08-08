@@ -2,7 +2,9 @@ package com.tobi.tobimod.mixin;
 
 import com.tobi.tobimod.TobiMod;
 import com.tobi.tobimod.common.abilities.KamuiIntangibilityState;
+import com.tobi.tobimod.common.abilities.KamuiScoutState;
 import com.tobi.tobimod.network.payload.KamuiIntangibilityStatePayload;
+import com.tobi.tobimod.network.payload.KamuiScoutStatePayload;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,14 +28,18 @@ public abstract class LivingEntityKamuiMixin {
         }
 
         boolean active;
+        boolean scoutActive;
         if (player.level().isClientSide()) {
             active = KamuiIntangibilityStatePayload.isClientKamuiActive();
+            scoutActive = KamuiScoutStatePayload.isClientActive();
         } else {
             KamuiIntangibilityState state = player.getExistingDataOrNull(TobiMod.KAMUI_INTANGIBILITY_STATE);
             active = state != null && state.isActive();
+            KamuiScoutState scout = player.getExistingDataOrNull(TobiMod.KAMUI_SCOUT_STATE);
+            scoutActive = scout != null && scout.isActive();
         }
 
-        if (!active) {
+        if (!active && !scoutActive) {
             return;
         }
 

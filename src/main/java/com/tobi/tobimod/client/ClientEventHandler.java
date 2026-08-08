@@ -4,11 +4,14 @@ import com.tobi.tobimod.TobiMod;
 import com.tobi.tobimod.client.keybinds.ModKeybindings;
 import com.tobi.tobimod.client.screens.KamuiNavigationScreen;
 import com.tobi.tobimod.client.sound.KamuiSoundManager;
+import com.tobi.tobimod.common.abilities.KamuiScoutState;
 import com.tobi.tobimod.network.payload.KamuiChannelCancelPayload;
 import com.tobi.tobimod.network.payload.KamuiChannelSyncPayload;
 import com.tobi.tobimod.network.payload.KamuiIntangibilityStatePayload;
 import com.tobi.tobimod.network.payload.KamuiIntangibilityTogglePayload;
 import com.tobi.tobimod.network.payload.KamuiJumpPayload;
+import com.tobi.tobimod.network.payload.KamuiScoutSpeedPayload;
+import com.tobi.tobimod.network.payload.KamuiScoutStatePayload;
 import com.tobi.tobimod.network.payload.KamuiVerticalMovePayload;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
@@ -21,9 +24,12 @@ import net.minecraft.world.level.material.FluidState;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.RenderBlockScreenEffectEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.neoforged.neoforge.client.event.ViewportEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
@@ -173,6 +179,12 @@ public final class ClientEventHandler {
 
     @SubscribeEvent
     public static void onInteractionKeyMappingTriggered(InputEvent.InteractionKeyMappingTriggered event) {
+        // Scout: block all interactions (spectator parity)
+        if (KamuiScoutStatePayload.isClientActive()) {
+            event.setCanceled(true);
+            event.setSwingHand(false);
+            return;
+        }
         if (!channelActive) return;
         // While channeling: block ALL attack/use interactions. Movement keys are NOT blocked here — they will cancel instead.
         if (event.isAttack() || event.isUseItem() || event.isPickBlock()) {
@@ -181,8 +193,109 @@ public final class ClientEventHandler {
         }
     }
 
+    // ── Scout: mouse scroll speed control (vanilla spectator style) ──
+    @SubscribeEvent
+    public static void onMouseScrolling(InputEvent.MouseScrollingEvent event) {
+        if (!KamuiScoutStatePayload.isClientActive()) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+        // If a screen is open, don't handle (wheel is for GUI)
+        if (mc.screen != null) return;
+
+        double delta = event.getScrollDeltaY();
+        if (delta == 0) return;
+
+        // vanilla spectator: each scroll tick changes flyingSpeed by 0.02, clamped 0.02-0.50
+        float current = mc.player.getAbilities().getFlyingSpeed();
+        // fallback to stored if mismatch
+        float stored = KamuiScoutStatePayload.getClientFlySpeed();
+        if (Math.abs(current - stored) > 0.001f) current = stored;
+
+        float step = KamuiScoutState.SCOUT_SPEED_STEP;
+        // scroll up (delta >0) => increase speed, down => decrease (match vanilla: scroll up faster)
+        float newSpeed = current + (float) delta * step;
+        newSpeed = Math.clamp(newSpeed, KamuiScoutState.MIN_SCOUT_SPEED, KamuiScoutState.MAX_SCOUT_SPEED);
+
+        if (newSpeed != current) {
+            mc.player.getAbilities().setFlyingSpeed(newSpeed);
+            KamuiScoutStatePayload.setClientFlySpeed(newSpeed);
+            PacketDistributor.sendToServer(new KamuiScoutSpeedPayload(newSpeed));
+            // show feedback like spectator: action bar
+            mc.player.displayClientMessage(
+                    net.minecraft.network.chat.Component.translatable("message.tobimod.kamui_scout_speed", String.format("%.2f", newSpeed * 20)), true);
+        }
+        event.setCanceled(true);
+    }
+
+    @SubscribeEvent
+    public static void onMouseButtonPre(InputEvent.MouseButton.Pre event) {
+        if (!KamuiScoutStatePayload.isClientActive()) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+        if (mc.screen != null) return;
+        // Middle click (button 2) resets to default
+        // GLFW: 0=left,1=right,2=middle
+        if (event.getButton() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE && event.getAction() == GLFW.GLFW_PRESS) {
+            float def = KamuiScoutState.DEFAULT_SCOUT_SPEED;
+            mc.player.getAbilities().setFlyingSpeed(def);
+            KamuiScoutStatePayload.setClientFlySpeed(def);
+            PacketDistributor.sendToServer(new KamuiScoutSpeedPayload(def));
+            mc.player.displayClientMessage(
+                    net.minecraft.network.chat.Component.translatable("message.tobimod.kamui_scout_speed_reset"), true);
+            event.setCanceled(true);
+        } else if (event.getButton() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.getButton() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+            // Block attacks/interacts while scout — already handled via InteractionKeyMapping but also block raw mouse
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        KamuiScoutStatePayload.resetClient();
+        // also ensure local physics reset if player still exists
+        var mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            mc.player.noPhysics = mc.player.isSpectator();
+            mc.player.setNoGravity(false);
+            mc.player.setInvisible(false);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onRenderBlockOverlay(RenderBlockScreenEffectEvent event) {
+        if (KamuiScoutStatePayload.isClientActive()) {
+            // Cancel powder snow, fire, wall overlay — spectator-like clear view inside blocks
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onViewportFog(ViewportEvent.RenderFog event) {
+        if (!KamuiScoutStatePayload.isClientActive()) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+        var level = mc.player.level();
+        if (level == null) return;
+        var cam = mc.gameRenderer.getMainCamera();
+        var camPos = cam.getBlockPosition();
+        var state = level.getBlockState(camPos);
+        if (!state.getCollisionShape(level, camPos).isEmpty()) {
+            event.setCanceled(true);
+        }
+    }
+
     @SubscribeEvent
     public static void onScreenOpening(ScreenEvent.Opening event) {
+        // Scout blocks inventory opening like spectator
+        if (KamuiScoutStatePayload.isClientActive()) {
+            if (event.getNewScreen() instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen) {
+                event.setCanceled(true);
+                return;
+            } else if (event.getNewScreen() instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen) {
+                event.setCanceled(true);
+                return;
+            }
+        }
         if (!channelActive) return;
         // While channeling you can't do anything — block inventory/container opening.
         // Allow chat screen and our own screens to close, but block inventory.
@@ -250,6 +363,30 @@ public final class ClientEventHandler {
             cancelChannel();
         }
 
+        // ── Scout tick (before kamui, same priority) ──
+        if (minecraft.player != null && KamuiScoutStatePayload.isClientActive()) {
+            Player scoutPlayer = minecraft.player;
+            scoutPlayer.noPhysics = true;
+            scoutPlayer.setNoGravity(true);
+            scoutPlayer.setInvisible(true);
+            scoutPlayer.resetFallDistance();
+            scoutPlayer.getAbilities().flying = true;
+            // ensure flyingSpeed matches synced value
+            float syncedSpeed = KamuiScoutStatePayload.getClientFlySpeed();
+            if (Math.abs(scoutPlayer.getAbilities().getFlyingSpeed() - syncedSpeed) > 0.001f) {
+                scoutPlayer.getAbilities().setFlyingSpeed(syncedSpeed);
+            }
+            // pose suppression
+            if (scoutPlayer.getPose() == net.minecraft.world.entity.Pose.SWIMMING
+                    || scoutPlayer.getPose() == net.minecraft.world.entity.Pose.CROUCHING
+                    || scoutPlayer.getPose() == net.minecraft.world.entity.Pose.FALL_FLYING
+                    || scoutPlayer.getPose() == net.minecraft.world.entity.Pose.SLEEPING) {
+                scoutPlayer.setPose(net.minecraft.world.entity.Pose.STANDING);
+            }
+            if (scoutPlayer.isPassenger()) scoutPlayer.stopRiding();
+            // Scout shares no floor — full 3D flight, so we don't do floor logic
+        }
+
         if (minecraft.player != null && KamuiIntangibilityStatePayload.isClientKamuiActive()) {
             Player player = minecraft.player;
             player.noPhysics = true;
@@ -277,6 +414,11 @@ public final class ClientEventHandler {
         // ── Keybinds ──
         while (ModKeybindings.KAMUI_INTANGIBILITY.consumeClick()) {
             if (minecraft.player == null) continue;
+            // Scout blocks R — must exit via wheel
+            if (KamuiScoutStatePayload.isClientActive()) {
+                // optional feedback: show that you need to exit scout via wheel
+                continue;
+            }
             // If channeling, R should cancel channel and turn on intangibility.
             // We handle sound stop immediately for responsiveness, then let server do force-activate.
             if (channelActive) {
@@ -437,11 +579,27 @@ public final class ClientEventHandler {
     @SubscribeEvent
     public static void onClientTickPost(ClientTickEvent.Post event) {
         Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player != null && KamuiScoutStatePayload.isClientActive()) {
+            // Scout: maintain free flight, no floor clamp, ensure noclip persists
+            minecraft.player.noPhysics = true;
+            minecraft.player.setNoGravity(true);
+            minecraft.player.setInvisible(true);
+            minecraft.player.resetFallDistance();
+            if (minecraft.player.getPose() == net.minecraft.world.entity.Pose.SWIMMING
+                    || minecraft.player.getPose() == net.minecraft.world.entity.Pose.CROUCHING
+                    || minecraft.player.getPose() == net.minecraft.world.entity.Pose.FALL_FLYING
+                    || minecraft.player.getPose() == net.minecraft.world.entity.Pose.SLEEPING) {
+                minecraft.player.setPose(net.minecraft.world.entity.Pose.STANDING);
+            }
+        }
         if (minecraft.player != null && KamuiIntangibilityStatePayload.isClientKamuiActive()) {
             boolean underground = KamuiIntangibilityStatePayload.isClientUnderground();
 
             if (!underground) {
-                minecraft.player.setNoGravity(false);
+                // Don't override gravity if scout also active (should not happen, but prefer scout)
+                if (!KamuiScoutStatePayload.isClientActive()) {
+                    minecraft.player.setNoGravity(false);
+                }
             }
 
             // Safety-net floor clamp
