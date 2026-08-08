@@ -1,9 +1,22 @@
-  {
+{
   "kamui_channel": {
     "subtitle": "sound.tobimod.kamui_channel",
     "sounds": [
       {
         "name": "tobimod:kamui_channel",
+        "stream": false
+      }
+    ]
+  },
+  "kamui_phased": {
+    "subtitle": "sound.tobimod.kamui_phased",
+    "sounds": [
+      {
+        "name": "tobimod:phased1",
+        "stream": false
+      },
+      {
+        "name": "tobimod:phased2",
         "stream": false
       }
     ]
