@@ -3,6 +3,7 @@ package com.tobi.tobimod;
 import com.mojang.logging.LogUtils;
 import com.mojang.serialization.MapCodec;
 import com.tobi.tobimod.common.abilities.KamuiIntangibilityState;
+import com.tobi.tobimod.common.abilities.KamuiScoutState;
 import com.tobi.tobimod.common.sound.ModSoundEvents;
 import com.tobi.tobimod.common.waypoints.KamuiWaypoints;
 import com.tobi.tobimod.common.world.KamuiChunkGenerator;
@@ -46,6 +47,13 @@ public final class TobiMod {
                     AttachmentType.builder(() -> new KamuiWaypoints())
                             .serialize(KamuiWaypoints.CODEC)
                             .copyOnDeath()
+                            .build()
+            );
+
+    public static final Supplier<AttachmentType<KamuiScoutState>> KAMUI_SCOUT_STATE =
+            ATTACHMENT_TYPES.register("kamui_scout_state", () ->
+                    AttachmentType.builder(KamuiScoutState::new)
+                            .serialize(KamuiScoutState.CODEC)
                             .build()
             );
 

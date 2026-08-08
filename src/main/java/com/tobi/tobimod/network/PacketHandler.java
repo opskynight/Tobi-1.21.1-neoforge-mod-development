@@ -13,6 +13,9 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import com.tobi.tobimod.common.waypoints.WaypointHandler;
 import com.tobi.tobimod.network.payload.KamuiChannelCancelPayload;
 import com.tobi.tobimod.network.payload.KamuiChannelSyncPayload;
+import com.tobi.tobimod.network.payload.KamuiScoutActionPayload;
+import com.tobi.tobimod.network.payload.KamuiScoutSpeedPayload;
+import com.tobi.tobimod.network.payload.KamuiScoutStatePayload;
 import com.tobi.tobimod.network.payload.ManualTeleportPayload;
 import com.tobi.tobimod.network.payload.WaypointActionPayload;
 import com.tobi.tobimod.network.payload.WaypointSyncPayload;
@@ -33,5 +36,8 @@ public final class PacketHandler {
         r.playToClient(KamuiIntangibilityStatePayload.TYPE, KamuiIntangibilityStatePayload.STREAM_CODEC, KamuiIntangibilityStatePayload::handle);
         r.playToClient(KamuiChannelSyncPayload.TYPE, KamuiChannelSyncPayload.STREAM_CODEC, KamuiChannelSyncPayload::handle);
         r.playToServer(KamuiChannelCancelPayload.TYPE, KamuiChannelCancelPayload.STREAM_CODEC, KamuiChannelCancelPayload::handle);
+        r.playToClient(KamuiScoutStatePayload.TYPE, KamuiScoutStatePayload.STREAM_CODEC, KamuiScoutStatePayload::handle);
+        r.playToServer(KamuiScoutActionPayload.TYPE, KamuiScoutActionPayload.STREAM_CODEC, KamuiScoutActionPayload::handle);
+        r.playToServer(KamuiScoutSpeedPayload.TYPE, KamuiScoutSpeedPayload.STREAM_CODEC, KamuiScoutSpeedPayload::handle);
     }
 }
