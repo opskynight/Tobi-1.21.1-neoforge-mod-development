@@ -203,7 +203,11 @@ public final class ClientEventHandler {
         if (mc.screen != null) return;
 
         double delta = event.getScrollDeltaY();
-        if (delta == 0) return;
+        if (delta == 0.0D) {
+            // some mice/trackpads report the notch on X; still treat as a speed tick
+            delta = event.getScrollDeltaX();
+        }
+        if (delta == 0.0D) return;
 
         // vanilla spectator: each scroll tick changes flyingSpeed by 0.02, clamped 0.02-0.50
         float current = mc.player.getAbilities().getFlyingSpeed();
@@ -368,9 +372,13 @@ public final class ClientEventHandler {
             Player scoutPlayer = minecraft.player;
             scoutPlayer.noPhysics = true;
             scoutPlayer.setNoGravity(true);
+            scoutPlayer.setOnGround(false);
             scoutPlayer.setInvisible(true);
             scoutPlayer.resetFallDistance();
             scoutPlayer.getAbilities().flying = true;
+            while (minecraft.options.keyDrop.consumeClick()) {
+                // spectator-like: no Q-drop while scouting
+            }
             // ensure flyingSpeed matches synced value
             float syncedSpeed = KamuiScoutStatePayload.getClientFlySpeed();
             if (Math.abs(scoutPlayer.getAbilities().getFlyingSpeed() - syncedSpeed) > 0.001f) {

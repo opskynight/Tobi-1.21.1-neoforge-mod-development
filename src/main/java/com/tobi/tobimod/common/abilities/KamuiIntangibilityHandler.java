@@ -23,6 +23,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.common.NeoForgeMod;
 import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
 import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
+import net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -87,6 +88,8 @@ public final class KamuiIntangibilityHandler {
     private static final Map<UUID, Double> LAST_SYNCED_FLOOR_Y = new HashMap<>();
     /** Previous underground state — for mode transition detection. */
     private static final Map<UUID, Boolean> PREV_UNDERGROUND = new HashMap<>();
+    /** Previous fully-buried (feet + body solid) state — drop chase on enter only. */
+    private static final Map<UUID, Boolean> PREV_FULLY_BURIED = new HashMap<>();
     /** Phased dodge sound throttle — fixed 1-second bucket, 3 sounds/sec per player */
     private static final Map<UUID, Long> LAST_PHASED_SECOND = new HashMap<>();
     private static final Map<UUID, Integer> PHASED_COUNT_IN_SECOND = new HashMap<>();
@@ -249,6 +252,7 @@ public final class KamuiIntangibilityHandler {
         UNDERGROUND_JUMP_HELD.remove(uuid);
         LAST_SYNCED_FLOOR_Y.remove(uuid);
         PREV_UNDERGROUND.remove(uuid);
+        PREV_FULLY_BURIED.remove(uuid);
         // keep phased throttle maps — don't clear on deactivate, they are per-second buckets
 
         // Restore normal pose
@@ -331,6 +335,7 @@ public final class KamuiIntangibilityHandler {
             UNDERGROUND_JUMP_HELD.remove(uuid);
             LAST_SYNCED_FLOOR_Y.remove(uuid);
             PREV_UNDERGROUND.remove(uuid);
+            PREV_FULLY_BURIED.remove(uuid);
             return;
         }
 
@@ -346,6 +351,13 @@ public final class KamuiIntangibilityHandler {
         boolean underground = isBodyInsideSolid(player);
         boolean wasUnderground = PREV_UNDERGROUND.getOrDefault(uuid, false);
         PREV_UNDERGROUND.put(uuid, underground);
+
+        boolean fullyBuried = underground && isFeetInsideSolid(player);
+        boolean wasFullyBuried = PREV_FULLY_BURIED.getOrDefault(uuid, false);
+        PREV_FULLY_BURIED.put(uuid, fullyBuried);
+        if (fullyBuried && !wasFullyBuried) {
+            KamuiScoutPerception.dropCombatAggro(player, AGGRO_CLEAR_RADIUS);
+        }
 
         // ══════════════════════════════════════════
         //  Underground Mode
@@ -611,13 +623,11 @@ public final class KamuiIntangibilityHandler {
     // ════════════════════════════════════════════════
 
     private static void clearNearbyMobAggro(ServerPlayer player) {
-        for (Mob mob : player.level().getEntitiesOfClass(
-                Mob.class,
-                player.getBoundingBox().inflate(AGGRO_CLEAR_RADIUS),
-                mob -> mob.getTarget() == player
-        )) {
-            mob.setTarget(null);
-        }
+        KamuiScoutPerception.dropCombatAggro(player, AGGRO_CLEAR_RADIUS);
+    }
+
+    static boolean isFullyBuried(ServerPlayer player) {
+        return isFeetInsideSolid(player) && isBodyInsideSolid(player);
     }
 
     /** Plays phased dodge sound — fixed 1-sec bucket, max 3/sec per player, broadcast to all nearby */
