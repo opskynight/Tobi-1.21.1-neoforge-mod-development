@@ -100,6 +100,9 @@ public final class KamuiIntangibilityHandler {
     public static void handleTogglePayload(KamuiIntangibilityTogglePayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer player) {
+                // Scout blocks intangibility toggle — must exit scout via wheel first
+                KamuiScoutState scout = player.getData(TobiMod.KAMUI_SCOUT_STATE);
+                if (scout.isActive()) return;
                 // If channeling, R cancels channel and force-enables intangibility (bypass cooldown) + stops sound
                 if (KamuiChannelHandler.isChanneling(player)) {
                     KamuiChannelHandler.cancelChannelAndActivateKamui(player);
