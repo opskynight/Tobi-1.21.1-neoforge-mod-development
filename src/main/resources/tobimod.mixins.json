@@ -5,9 +5,14 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "LivingEntityKamuiMixin",
-    "EntityKamuiMixin"
+    "EntityKamuiMixin",
+    "EntityFlagAccessor",
+    "PlayerScoutMixin",
+    "PlayerScoutTravelMixin"
   ],
-  "client": [],
+  "client": [
+    "ItemInHandRendererScoutMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   },

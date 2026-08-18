@@ -20,12 +20,17 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.common.NeoForgeMod;
 import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
 import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
+import net.neoforged.neoforge.common.util.TriState;
+import net.neoforged.neoforge.event.entity.item.ItemTossEvent;
 import net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent;
+import net.neoforged.neoforge.event.entity.living.LivingEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingKnockBackEvent;
 import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
+import net.neoforged.neoforge.event.entity.player.ItemEntityPickupEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerXpEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
@@ -90,7 +95,7 @@ public final class KamuiScoutHandler {
         // cancel travel channel if somehow active? channel handler will handle
         scout.activate(player, now);
         applyScoutMode(player, scout);
-        clearNearbyMobAggro(player);
+        KamuiScoutPerception.dropCombatAggro(player, AGGRO_CLEAR_RADIUS);
         forceSync(player, scout);
         player.displayClientMessage(Component.translatable("message.tobimod.kamui_scout_enter"), true);
         return true;
@@ -196,15 +201,7 @@ public final class KamuiScoutHandler {
         PacketDistributor.sendToPlayer(player, new KamuiScoutStatePayload(state.isActive(), state.scoutSpeed()));
     }
 
-    private static void clearNearbyMobAggro(ServerPlayer player) {
-        for (Mob mob : player.level().getEntitiesOfClass(
-                Mob.class,
-                player.getBoundingBox().inflate(AGGRO_CLEAR_RADIUS),
-                mob -> mob.getTarget() == player
-        )) {
-            mob.setTarget(null);
-        }
-    }
+
 
     // ═══════════════════════════ Ticks ═══════════════════════════
 
@@ -216,6 +213,7 @@ public final class KamuiScoutHandler {
 
         player.noPhysics = true;
         player.setNoGravity(true);
+        player.setOnGround(false);
         player.resetFallDistance();
         // keep invisible and flying
         player.setInvisible(true);
@@ -344,6 +342,50 @@ public final class KamuiScoutHandler {
         if (event.getEntity() instanceof ServerPlayer sp) {
             KamuiScoutState s = sp.getData(TobiMod.KAMUI_SCOUT_STATE);
             if (s.isActive()) event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onScoutVisibility(LivingEvent.LivingVisibilityEvent event) {
+        if (KamuiScoutPerception.isUndetectable(event.getEntity())) {
+            event.modifyVisibility(0.0D);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        if (event.getEntity() instanceof ServerPlayer sp && sp.getData(TobiMod.KAMUI_SCOUT_STATE).isActive()) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
+        if (event.getEntity() instanceof ServerPlayer sp && sp.getData(TobiMod.KAMUI_SCOUT_STATE).isActive()) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onItemPickup(ItemEntityPickupEvent.Pre event) {
+        if (event.getPlayer() instanceof ServerPlayer sp && sp.getData(TobiMod.KAMUI_SCOUT_STATE).isActive()) {
+            event.setCanPickup(TriState.FALSE);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onXpPickup(PlayerXpEvent.PickupXp event) {
+        if (event.getEntity() instanceof ServerPlayer sp && sp.getData(TobiMod.KAMUI_SCOUT_STATE).isActive()) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onItemToss(ItemTossEvent event) {
+        if (event.getPlayer() instanceof ServerPlayer sp && sp.getData(TobiMod.KAMUI_SCOUT_STATE).isActive()) {
+            event.setCanceled(true);
+            sp.getInventory().placeItemBackInInventory(event.getEntity().getItem().copy());
+            event.getEntity().discard();
         }
     }
 
